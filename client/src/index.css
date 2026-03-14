@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  --color-noc-bg: #0a0e14;
+  --color-noc-surface: #111820;
+  --color-noc-panel: #161d27;
+  --color-noc-border: #1e2a38;
+  --color-noc-border-bright: #2a3a4e;
+  --color-noc-text: #c8d6e5;
+  --color-noc-text-dim: #5a6f85;
+  --color-noc-text-bright: #e8f0f8;
+  --color-noc-amber: #f0a830;
+  --color-noc-amber-dim: #886018;
+  --color-noc-green: #00e676;
+  --color-noc-green-dim: #00703b;
+  --color-noc-red: #ff3d3d;
+  --color-noc-red-dim: #801e1e;
+  --color-noc-blue: #40a9ff;
+  --color-noc-blue-dim: #1a4670;
+  --color-noc-cyan: #00e5ff;
+  --font-mono: "JetBrains Mono", "Fira Code", monospace;
+  --font-sans: "IBM Plex Sans", system-ui, sans-serif;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  background: var(--color-noc-bg);
+  color: var(--color-noc-text);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+}
+
+/* Scanline overlay for NOC feel */
+#root::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.03) 2px,
+    rgba(0, 0, 0, 0.03) 4px
+  );
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--color-noc-bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--color-noc-border-bright);
+  border-radius: 3px;
+}
+
+@keyframes pulse-green {
+  0%, 100% { box-shadow: 0 0 4px var(--color-noc-green), 0 0 8px rgba(0, 230, 118, 0.3); }
+  50% { box-shadow: 0 0 8px var(--color-noc-green), 0 0 20px rgba(0, 230, 118, 0.5); }
+}
+@keyframes pulse-red {
+  0%, 100% { box-shadow: 0 0 4px var(--color-noc-red), 0 0 8px rgba(255, 61, 61, 0.3); }
+  50% { box-shadow: 0 0 8px var(--color-noc-red), 0 0 20px rgba(255, 61, 61, 0.5); }
+}
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-pulse-green { animation: pulse-green 2s ease-in-out infinite; }
+.animate-pulse-red { animation: pulse-red 1.5s ease-in-out infinite; }
+.animate-fade-in-up { animation: fade-in-up 0.4s ease-out both; }
