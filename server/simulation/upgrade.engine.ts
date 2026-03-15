@@ -17,6 +17,7 @@ export interface UpgradeStep {
   }[];
   notes: string[];
   estimatedMinutes: { min: number; max: number };
+  agLabels: string[];
 }
 
 export interface ParallelGroup {
@@ -25,7 +26,15 @@ export interface ParallelGroup {
   combinedReRegistering: number;
   combinedUnregistered: number;
   estimatedMinutes: { min: number; max: number }; // max of individual steps (concurrent)
+  agLabels: string[];
   notes: string[];
+}
+
+interface AvailabilityGroupInfo {
+  label: string;
+  servers: string[];
+  cmgNames: string[];
+  phoneCount: number;
 }
 
 export interface UpgradeAnalysis {
@@ -33,6 +42,7 @@ export interface UpgradeAnalysis {
   totalServers: number;
   steps: UpgradeStep[];
   parallelGroups: ParallelGroup[];
+  availabilityGroups: AvailabilityGroupInfo[];
   summary: {
     maxConcurrentReRegistrations: number;
     totalPhones: number;
@@ -71,6 +81,7 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
       totalServers: 0,
       steps: [],
       parallelGroups: [],
+      availabilityGroups: [],
       summary: { maxConcurrentReRegistrations: 0, totalPhones: 0, estimatedTotalMinutes: { min: 0, max: 0 } },
       parallelSummary: { totalGroups: 0, maxConcurrentReRegistrations: 0, estimatedTotalMinutes: { min: 0, max: 0 } },
     };
@@ -215,6 +226,68 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
     .prepare("SELECT COUNT(*) as count FROM phones")
     .get() as { count: number };
 
+  // Compute Availability Groups (same logic as ag.routes.ts)
+  const cmgServerSets = cmGroups.map((cmg: any) => {
+    const members = cmgMembers.get(cmg.id) || [];
+    const servers = members.map((m: any) => m.server_name.split(".")[0]).sort();
+    return { cmg, servers, serverKey: servers.join(",") };
+  });
+
+  const channelMap = new Map<string, { servers: string[]; cmgs: any[] }>();
+  for (const entry of cmgServerSets) {
+    if (!channelMap.has(entry.serverKey)) {
+      channelMap.set(entry.serverKey, { servers: entry.servers, cmgs: [] });
+    }
+    channelMap.get(entry.serverKey)!.cmgs.push(entry.cmg);
+  }
+
+  const phoneCounts = new Map<number, number>();
+  const pcRows = db
+    .prepare(
+      `SELECT dp.cm_group_id, COUNT(p.id) as count
+       FROM phones p
+       JOIN device_pools dp ON p.device_pool_id = dp.id
+       GROUP BY dp.cm_group_id`
+    )
+    .all() as { cm_group_id: number; count: number }[];
+  for (const r of pcRows) {
+    phoneCounts.set(r.cm_group_id, r.count);
+  }
+
+  const agChannels = Array.from(channelMap.values())
+    .map((ch) => {
+      const phoneCount = ch.cmgs.reduce(
+        (sum: number, cmg: any) => sum + (phoneCounts.get(cmg.id) || 0),
+        0
+      );
+      return { ...ch, phoneCount };
+    })
+    .sort((a, b) => b.phoneCount - a.phoneCount);
+
+  const availabilityGroups: AvailabilityGroupInfo[] = agChannels.map((ch, i) => ({
+    label: `AG-${i + 1}`,
+    servers: ch.servers,
+    cmgNames: ch.cmgs.map((c: any) => c.name),
+    phoneCount: ch.phoneCount,
+  }));
+
+  // Build server name → AG labels map
+  const serverAgMap = new Map<string, string[]>();
+  for (const ag of availabilityGroups) {
+    for (const srv of ag.servers) {
+      if (!serverAgMap.has(srv)) {
+        serverAgMap.set(srv, []);
+      }
+      serverAgMap.get(srv)!.push(ag.label);
+    }
+  }
+
+  // Populate agLabels on each step
+  for (const step of steps) {
+    const shortName = step.serverName.split(".")[0];
+    step.agLabels = serverAgMap.get(shortName) || [];
+  }
+
   const totalMinMin = steps.reduce((s, st) => s + st.estimatedMinutes.min, 0);
   const totalMinMax = steps.reduce((s, st) => s + st.estimatedMinutes.max, 0);
 
@@ -229,6 +302,7 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
     totalServers: allServers.length,
     steps,
     parallelGroups,
+    availabilityGroups,
     summary: {
       maxConcurrentReRegistrations: steps.length > 0
         ? Math.max(...steps.map((s) => s.phonesReRegistering))
@@ -347,12 +421,15 @@ function makeGroup(groupNumber: number, steps: UpgradeStep[]): ParallelGroup {
     notes.push(`Servers: ${names}`);
   }
 
+  const agLabels = Array.from(new Set(steps.flatMap((s) => s.agLabels))).sort();
+
   return {
     groupNumber,
     steps,
     combinedReRegistering: combinedReReg,
     combinedUnregistered: combinedUnreg,
     estimatedMinutes: { min: estMin, max: estMax },
+    agLabels,
     notes,
   };
 }
@@ -527,5 +604,6 @@ function computeStep(
     ),
     notes,
     estimatedMinutes,
+    agLabels: [], // populated later in analyzeUpgradeOrder
   };
 }

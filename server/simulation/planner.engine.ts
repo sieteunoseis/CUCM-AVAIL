@@ -19,25 +19,37 @@ export interface CmgAssignment {
 
 export interface PlannerResult {
   currentState: {
-    serverLoads: { serverName: string; phoneCount: number; cmgs: string[] }[];
-    imbalanceRatio: number; // max/min ratio
+    serverLoads: { serverName: string; phoneCount: number; cmgs: string[]; agLabels: string[] }[];
+    imbalanceRatio: number;
   };
   proposedState: {
-    serverLoads: { serverName: string; phoneCount: number; cmgs: string[] }[];
+    serverLoads: { serverName: string; phoneCount: number; cmgs: string[]; agLabels: string[] }[];
     imbalanceRatio: number;
   };
   geoZones: {
     name: string;
     subnetCidrs: string[];
     phoneCount: number;
+    currentCmg: string;
     assignedCmg: string;
     primaryServer: string;
+    agLabel: string;
   }[];
   unmappedPhones: number;
   totalPhones: number;
+  phoneStats: {
+    totalPhones: number;
+    registeredPhones: number;
+    unregisteredPhones: number;
+    neverSeenPhones: number;
+    stalePhones: number;
+  };
+  rebalanceCmgIds: number[];
+  lockedCmgIds: number[];
+  allCmgs: { id: number; name: string; phoneCount: number; ccmActive: boolean }[];
 }
 
-export function runPlanner(): PlannerResult {
+export function runPlanner(selectedCmgIds?: number[]): PlannerResult {
   const db = getDb();
   const subnets = getAllSubnets() as SubnetRow[];
 
@@ -74,6 +86,113 @@ export function runPlanner(): PlannerResult {
     cmgMembers.set(cmg.id, members);
   }
 
+  // Compute Availability Groups (server → AG labels)
+  const cmgServerSets = cmGroups.map((cmg: any) => {
+    const members = cmgMembers.get(cmg.id) || [];
+    const servers = members.map((m: any) => m.server_name.split(".")[0]).sort();
+    return { cmg, servers, serverKey: servers.join(",") };
+  });
+
+  const agChannelMap = new Map<string, { servers: string[]; cmgs: any[] }>();
+  for (const entry of cmgServerSets) {
+    if (!agChannelMap.has(entry.serverKey)) {
+      agChannelMap.set(entry.serverKey, { servers: entry.servers, cmgs: [] });
+    }
+    agChannelMap.get(entry.serverKey)!.cmgs.push(entry.cmg);
+  }
+
+  // Count phones per CMG
+  const cmgPhoneCountsForAg = new Map<number, number>();
+  const pcRows = db
+    .prepare(
+      `SELECT dp.cm_group_id, COUNT(p.id) as count
+       FROM phones p
+       JOIN device_pools dp ON p.device_pool_id = dp.id
+       GROUP BY dp.cm_group_id`
+    )
+    .all() as { cm_group_id: number; count: number }[];
+  for (const r of pcRows) {
+    cmgPhoneCountsForAg.set(r.cm_group_id, r.count);
+  }
+
+  const agChannels = Array.from(agChannelMap.values())
+    .map((ch) => {
+      const phoneCount = ch.cmgs.reduce(
+        (sum: number, cmg: any) => sum + (cmgPhoneCountsForAg.get(cmg.id) || 0),
+        0
+      );
+      return { ...ch, phoneCount };
+    })
+    .sort((a, b) => b.phoneCount - a.phoneCount);
+
+  const agLabelsMap = new Map<string, string>(); // server short name → AG label
+  const cmgAgLabelMap = new Map<number, string>(); // cmg id → AG label
+  agChannels.forEach((ch, i) => {
+    const label = `AG-${i + 1}`;
+    for (const srv of ch.servers) {
+      agLabelsMap.set(srv, label);
+    }
+    for (const cmg of ch.cmgs) {
+      cmgAgLabelMap.set(cmg.id, label);
+    }
+  });
+
+  // Build server → AG labels (a server can be in multiple AGs)
+  const serverAgLabels = new Map<string, string[]>();
+  agChannels.forEach((ch, i) => {
+    const label = `AG-${i + 1}`;
+    for (const srv of ch.servers) {
+      if (!serverAgLabels.has(srv)) serverAgLabels.set(srv, []);
+      serverAgLabels.get(srv)!.push(label);
+    }
+  });
+
+  // Phone stats
+  const totalPhonesCount = phones.length;
+  const registeredPhones = (db.prepare(
+    `SELECT COUNT(DISTINCT rs.phone_id) as count
+     FROM registration_snapshots rs
+     WHERE rs.polled_at = (SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = rs.phone_id)
+       AND rs.status IN ('Registered', 'registered')`
+  ).get() as any)?.count || 0;
+
+  const neverSeenPhones = (db.prepare(
+    `SELECT COUNT(*) as count FROM phones p
+     WHERE NOT EXISTS (SELECT 1 FROM registration_snapshots rs WHERE rs.phone_id = p.id)`
+  ).get() as any)?.count || 0;
+
+  const stalePhones = (db.prepare(
+    `SELECT COUNT(DISTINCT rs.phone_id) as count
+     FROM registration_snapshots rs
+     WHERE rs.polled_at = (SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = rs.phone_id)
+       AND rs.polled_at < datetime('now', '-7 days')`
+  ).get() as any)?.count || 0;
+
+  const phoneStats = {
+    totalPhones: totalPhonesCount,
+    registeredPhones,
+    unregisteredPhones: totalPhonesCount - registeredPhones - neverSeenPhones,
+    neverSeenPhones,
+    stalePhones,
+  };
+
+  // All CMGs for selection UI
+  const allCmgs = cmGroups.map((cmg: any) => {
+    const members = cmgMembers.get(cmg.id) || [];
+    const ccmActive = members.some((m: any) => {
+      const server = db
+        .prepare("SELECT ccm_service_active FROM servers WHERE id = ?")
+        .get(m.server_id) as any;
+      return server?.ccm_service_active === 1;
+    });
+    return {
+      id: cmg.id,
+      name: cmg.name,
+      phoneCount: cmgPhoneCountsForAg.get(cmg.id) || 0,
+      ccmActive,
+    };
+  });
+
   // --- Current State ---
   // Count phones per priority-1 server (based on current CMG assignment)
   const currentServerLoads = new Map<string, { count: number; cmgs: Set<string> }>();
@@ -100,6 +219,7 @@ export function runPlanner(): PlannerResult {
       serverName: name,
       phoneCount: data.count,
       cmgs: Array.from(data.cmgs),
+      agLabels: serverAgLabels.get(name.split(".")[0]) || [],
     }))
     .sort((a, b) => b.phoneCount - a.phoneCount);
 
@@ -141,8 +261,11 @@ export function runPlanner(): PlannerResult {
     .sort((a, b) => b.phoneCount - a.phoneCount);
 
   // --- Propose balanced CMG assignments ---
-  // Get CCM-active CMGs (ones with at least one CCM-active server as priority 1)
+  // Get CCM-active CMGs, filtered by selectedCmgIds if provided
   const ccmCmgs = cmGroups.filter((cmg: any) => {
+    if (selectedCmgIds && selectedCmgIds.length > 0) {
+      return selectedCmgIds.includes(cmg.id);
+    }
     const members = cmgMembers.get(cmg.id) || [];
     return members.some((m: any) => {
       const server = db
@@ -215,6 +338,7 @@ export function runPlanner(): PlannerResult {
       serverName: name,
       phoneCount: data.count,
       cmgs: Array.from(data.cmgs),
+      agLabels: serverAgLabels.get(name.split(".")[0]) || [],
     }))
     .sort((a, b) => b.phoneCount - a.phoneCount);
 
@@ -222,16 +346,37 @@ export function runPlanner(): PlannerResult {
   const proposedMin = Math.max(Math.min(...proposedLoads.map((l) => l.phoneCount)), 1);
   const proposedImbalance = proposedMax / proposedMin;
 
+  // Build a map of subnet name → current CMG (majority vote from phones in that subnet)
+  const subnetCurrentCmg = new Map<string, string>();
+  for (const [name, data] of subnetPhones.entries()) {
+    const cmgVotes = new Map<string, number>();
+    for (const phone of data.phones) {
+      const cmg = phone.cmg_name || "Unknown";
+      cmgVotes.set(cmg, (cmgVotes.get(cmg) || 0) + 1);
+    }
+    let bestCmg = "Unknown";
+    let bestCount = 0;
+    for (const [cmg, count] of cmgVotes) {
+      if (count > bestCount) {
+        bestCmg = cmg;
+        bestCount = count;
+      }
+    }
+    subnetCurrentCmg.set(name, bestCmg);
+  }
+
   // Build output geo zones with CMG assignments
   const geoZoneOutput = sortedZones.map((zone) => {
     // Find which CMG this zone was assigned to
     let assignedCmgName = "Unassigned";
     let primaryServer = "—";
+    let agLabel = "";
 
     for (const cmg of ccmCmgs) {
       const zones = cmgGeoZones.get(cmg.id) || [];
       if (zones.includes(zone.name)) {
         assignedCmgName = cmg.name;
+        agLabel = cmgAgLabelMap.get(cmg.id) || "";
         const members = cmgMembers.get(cmg.id) || [];
         const primary = members.find((m: any) => m.priority === 1);
         if (primary) primaryServer = primary.server_name;
@@ -243,10 +388,15 @@ export function runPlanner(): PlannerResult {
       name: zone.name,
       subnetCidrs: [zone.cidr],
       phoneCount: zone.phoneCount,
+      currentCmg: subnetCurrentCmg.get(zone.name) || "Unknown",
       assignedCmg: assignedCmgName,
       primaryServer,
+      agLabel,
     };
   });
+
+  // Default rebalance CMG IDs (all CCM-active)
+  const defaultCcmCmgIds = allCmgs.filter((c) => c.ccmActive).map((c) => c.id);
 
   return {
     currentState: {
@@ -260,5 +410,9 @@ export function runPlanner(): PlannerResult {
     geoZones: geoZoneOutput,
     unmappedPhones: unmapped,
     totalPhones: phones.length,
+    phoneStats,
+    rebalanceCmgIds: selectedCmgIds || defaultCcmCmgIds,
+    lockedCmgIds: [],
+    allCmgs,
   };
 }
