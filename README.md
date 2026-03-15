@@ -44,12 +44,14 @@ Real-time visibility into Cisco Unified Communications Manager (CUCM) phone regi
 
 ## Quick Start with Docker
 
-The easiest way to run the dashboard is with Docker Compose. See [`docker/`](docker/) for a ready-to-use setup.
+No need to clone the repo — download the compose files directly and run:
 
 ```bash
-cp docker/.env.example docker/.env
-# Edit docker/.env with your CUCM credentials
-docker compose -f docker/docker-compose.yml up -d
+mkdir cucm-avail && cd cucm-avail
+wget https://raw.githubusercontent.com/sieteunoseis/CUCM-AVAIL/main/docker/docker-compose.yml
+wget https://raw.githubusercontent.com/sieteunoseis/CUCM-AVAIL/main/docker/.env.example -O .env
+# Edit .env with your CUCM credentials
+docker compose up -d
 ```
 
 Open [http://localhost:3000](http://localhost:3000)
