@@ -18,6 +18,7 @@ import upgradeRouter from "./routes/upgrade.routes.js";
 import devicepoolsRouter from "./routes/devicepools.routes.js";
 import plannerRouter from "./routes/planner.routes.js";
 import trunksRouter from "./routes/trunks.routes.js";
+import agRouter from "./routes/ag.routes.js";
 import { join, dirname } from "path";
 import { fileURLToPath, URL } from "url";
 import { existsSync } from "fs";
@@ -46,6 +47,7 @@ app.use("/api/upgrade", upgradeRouter);
 app.use("/api/devicepools", devicepoolsRouter);
 app.use("/api/planner", plannerRouter);
 app.use("/api/trunks", trunksRouter);
+app.use("/api/ag", agRouter);
 
 app.get("/api/poll/status", (_req, res) => {
   res.json({
