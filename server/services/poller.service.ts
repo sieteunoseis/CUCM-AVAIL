@@ -12,6 +12,7 @@ import {
   updateServerServiceStatus,
   pruneOldSnapshots,
 } from "../db/queries.js";
+import { invalidateCache } from "./cache.service.js";
 
 let lastPollTime: Date | null = null;
 let pollInProgress = false;
@@ -136,6 +137,7 @@ export async function runPoll() {
     pruneOldSnapshots(7);
 
     lastPollTime = new Date();
+    invalidateCache();
     emitLog("[Poller] Poll cycle complete");
 
     if (onPollComplete) {

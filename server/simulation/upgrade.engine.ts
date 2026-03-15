@@ -450,16 +450,19 @@ function buildPhoneServerMap(
 
   const phoneServerMap = new Map<number, number | null>();
 
-  for (const phone of phones) {
-    const latestReg = db
-      .prepare(
-        `SELECT registered_server_id FROM registration_snapshots
-         WHERE phone_id = ? ORDER BY polled_at DESC LIMIT 1`
-      )
-      .get(phone.id) as any;
+  // Bulk load latest registrations
+  const latestRegs = db
+    .prepare(`SELECT phone_id, registered_server_id FROM latest_registrations`)
+    .all() as { phone_id: number; registered_server_id: number | null }[];
+  const latestRegMap = new Map<number, number | null>();
+  for (const r of latestRegs) {
+    latestRegMap.set(r.phone_id, r.registered_server_id);
+  }
 
-    if (latestReg?.registered_server_id) {
-      phoneServerMap.set(phone.id, latestReg.registered_server_id);
+  for (const phone of phones) {
+    const regServerId = latestRegMap.get(phone.id);
+    if (regServerId) {
+      phoneServerMap.set(phone.id, regServerId);
     } else {
       // Assume priority 1 server of CMG
       const members = cmgMembers.get(phone.cm_group_id);

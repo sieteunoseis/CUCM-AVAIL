@@ -57,12 +57,11 @@ export function runPlanner(selectedCmgIds?: number[]): PlannerResult {
   const phones = db
     .prepare(
       `SELECT p.id, p.name, dp.name as dp_name, cmg.name as cmg_name,
-              rs.ip_address
+              lr.ip_address
        FROM phones p
        JOIN device_pools dp ON p.device_pool_id = dp.id
        LEFT JOIN cm_groups cmg ON dp.cm_group_id = cmg.id
-       LEFT JOIN registration_snapshots rs ON rs.phone_id = p.id
-         AND rs.polled_at = (SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = p.id)
+       LEFT JOIN latest_registrations lr ON lr.phone_id = p.id
        ORDER BY p.name`
     )
     .all() as any[];
@@ -150,22 +149,18 @@ export function runPlanner(selectedCmgIds?: number[]): PlannerResult {
   // Phone stats
   const totalPhonesCount = phones.length;
   const registeredPhones = (db.prepare(
-    `SELECT COUNT(DISTINCT rs.phone_id) as count
-     FROM registration_snapshots rs
-     WHERE rs.polled_at = (SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = rs.phone_id)
-       AND rs.status IN ('Registered', 'registered')`
+    `SELECT COUNT(*) as count FROM latest_registrations
+     WHERE status IN ('Registered', 'registered')`
   ).get() as any)?.count || 0;
 
   const neverSeenPhones = (db.prepare(
     `SELECT COUNT(*) as count FROM phones p
-     WHERE NOT EXISTS (SELECT 1 FROM registration_snapshots rs WHERE rs.phone_id = p.id)`
+     WHERE NOT EXISTS (SELECT 1 FROM latest_registrations lr WHERE lr.phone_id = p.id)`
   ).get() as any)?.count || 0;
 
   const stalePhones = (db.prepare(
-    `SELECT COUNT(DISTINCT rs.phone_id) as count
-     FROM registration_snapshots rs
-     WHERE rs.polled_at = (SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = rs.phone_id)
-       AND rs.polled_at < datetime('now', '-7 days')`
+    `SELECT COUNT(*) as count FROM latest_registrations
+     WHERE polled_at < datetime('now', '-7 days')`
   ).get() as any)?.count || 0;
 
   const phoneStats = {

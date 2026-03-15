@@ -177,9 +177,19 @@ export function insertRegistrationBatch(
     `INSERT INTO registration_snapshots (phone_id, registered_server_id, status, ip_address)
      VALUES (@phoneId, @registeredServerId, @status, @ipAddress)`
   );
+  const upsertLatest = db.prepare(
+    `INSERT INTO latest_registrations (phone_id, registered_server_id, status, ip_address, polled_at)
+     VALUES (@phoneId, @registeredServerId, @status, @ipAddress, datetime('now'))
+     ON CONFLICT(phone_id) DO UPDATE SET
+       registered_server_id = @registeredServerId,
+       status = @status,
+       ip_address = @ipAddress,
+       polled_at = datetime('now')`
+  );
   const tx = db.transaction(() => {
     for (const s of snapshots) {
       insert.run(s);
+      upsertLatest.run(s);
     }
   });
   tx();
@@ -188,13 +198,11 @@ export function insertRegistrationBatch(
 export function getLatestRegistrations() {
   return getDb()
     .prepare(
-      `SELECT rs.*, p.name as phone_name, s.name as server_name, s.hostname as server_hostname
-       FROM registration_snapshots rs
-       JOIN phones p ON rs.phone_id = p.id
-       LEFT JOIN servers s ON rs.registered_server_id = s.id
-       WHERE rs.polled_at = (
-         SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = rs.phone_id
-       )`
+      `SELECT lr.phone_id, lr.registered_server_id, lr.status, lr.ip_address, lr.polled_at,
+              p.name as phone_name, s.name as server_name, s.hostname as server_hostname
+       FROM latest_registrations lr
+       JOIN phones p ON lr.phone_id = p.id
+       LEFT JOIN servers s ON lr.registered_server_id = s.id`
     )
     .all();
 }
@@ -202,13 +210,10 @@ export function getLatestRegistrations() {
 export function getRegistrationStats() {
   return getDb()
     .prepare(
-      `SELECT s.name as server_name, rs.status, COUNT(*) as count
-       FROM registration_snapshots rs
-       LEFT JOIN servers s ON rs.registered_server_id = s.id
-       WHERE rs.polled_at = (
-         SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = rs.phone_id
-       )
-       GROUP BY s.name, rs.status`
+      `SELECT s.name as server_name, lr.status, COUNT(*) as count
+       FROM latest_registrations lr
+       LEFT JOIN servers s ON lr.registered_server_id = s.id
+       GROUP BY s.name, lr.status`
     )
     .all();
 }
@@ -227,12 +232,11 @@ export function getFailoverSummary() {
        JOIN cm_groups cmg ON dp.cm_group_id = cmg.id
        JOIN cm_group_members cgm_pri ON cgm_pri.cm_group_id = cmg.id AND cgm_pri.priority = 1
        JOIN servers s_pri ON cgm_pri.server_id = s_pri.id
-       JOIN registration_snapshots rs ON rs.phone_id = p.id
-         AND rs.polled_at = (SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = p.id)
-       JOIN servers s_reg ON rs.registered_server_id = s_reg.id
+       JOIN latest_registrations lr ON lr.phone_id = p.id
+       JOIN servers s_reg ON lr.registered_server_id = s_reg.id
        LEFT JOIN cm_group_members cgm_match ON cgm_match.cm_group_id = cmg.id AND cgm_match.server_id = s_reg.id
-       WHERE rs.status = 'Registered'
-         AND rs.registered_server_id != cgm_pri.server_id
+       WHERE lr.status = 'Registered'
+         AND lr.registered_server_id != cgm_pri.server_id
        GROUP BY cmg.name, s_reg.name, s_pri.name, cgm_match.priority
        ORDER BY count DESC`
     )
@@ -247,7 +251,7 @@ export function getFailoverDetails() {
          p.model,
          dp.name as device_pool_name,
          cmg.name as cm_group_name,
-         rs.ip_address,
+         lr.ip_address,
          s_reg.name as registered_server,
          s_pri.name as primary_server,
          cgm_match.priority as registered_priority
@@ -256,12 +260,11 @@ export function getFailoverDetails() {
        JOIN cm_groups cmg ON dp.cm_group_id = cmg.id
        JOIN cm_group_members cgm_pri ON cgm_pri.cm_group_id = cmg.id AND cgm_pri.priority = 1
        JOIN servers s_pri ON cgm_pri.server_id = s_pri.id
-       JOIN registration_snapshots rs ON rs.phone_id = p.id
-         AND rs.polled_at = (SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = p.id)
-       JOIN servers s_reg ON rs.registered_server_id = s_reg.id
+       JOIN latest_registrations lr ON lr.phone_id = p.id
+       JOIN servers s_reg ON lr.registered_server_id = s_reg.id
        LEFT JOIN cm_group_members cgm_match ON cgm_match.cm_group_id = cmg.id AND cgm_match.server_id = s_reg.id
-       WHERE rs.status = 'Registered'
-         AND rs.registered_server_id != cgm_pri.server_id
+       WHERE lr.status = 'Registered'
+         AND lr.registered_server_id != cgm_pri.server_id
        ORDER BY cmg.name, s_reg.name, p.name`
     )
     .all();
@@ -308,11 +311,10 @@ export function getDevicePoolPhoneBreakdown(devicePoolId: number) {
   // Phones with their current server and IP
   const phones = db
     .prepare(
-      `SELECT p.id, p.name, p.model, rs.ip_address, rs.status, s.name as server_name
+      `SELECT p.id, p.name, p.model, lr.ip_address, lr.status, s.name as server_name
        FROM phones p
-       LEFT JOIN registration_snapshots rs ON rs.phone_id = p.id
-         AND rs.polled_at = (SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = p.id)
-       LEFT JOIN servers s ON rs.registered_server_id = s.id
+       LEFT JOIN latest_registrations lr ON lr.phone_id = p.id
+       LEFT JOIN servers s ON lr.registered_server_id = s.id
        WHERE p.device_pool_id = ?
        ORDER BY p.name`
     )
@@ -323,9 +325,8 @@ export function getDevicePoolPhoneBreakdown(devicePoolId: number) {
     .prepare(
       `SELECT s.name as server_name, COUNT(*) as count
        FROM phones p
-       JOIN registration_snapshots rs ON rs.phone_id = p.id
-         AND rs.polled_at = (SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = p.id)
-       JOIN servers s ON rs.registered_server_id = s.id
+       JOIN latest_registrations lr ON lr.phone_id = p.id
+       JOIN servers s ON lr.registered_server_id = s.id
        WHERE p.device_pool_id = ?
        GROUP BY s.name
        ORDER BY count DESC`
@@ -390,9 +391,19 @@ export function insertTrunkSnapshotBatch(
     `INSERT INTO trunk_snapshots (trunk_id, registered_server_id, status, ip_address)
      VALUES (@trunkId, @registeredServerId, @status, @ipAddress)`
   );
+  const upsertLatest = db.prepare(
+    `INSERT INTO latest_trunk_registrations (trunk_id, registered_server_id, status, ip_address, polled_at)
+     VALUES (@trunkId, @registeredServerId, @status, @ipAddress, datetime('now'))
+     ON CONFLICT(trunk_id) DO UPDATE SET
+       registered_server_id = @registeredServerId,
+       status = @status,
+       ip_address = @ipAddress,
+       polled_at = datetime('now')`
+  );
   const tx = db.transaction(() => {
     for (const s of snapshots) {
       insert.run(s);
+      upsertLatest.run(s);
     }
   });
   tx();
@@ -401,16 +412,14 @@ export function insertTrunkSnapshotBatch(
 export function getLatestTrunkRegistrations() {
   return getDb()
     .prepare(
-      `SELECT ts.*, t.name as trunk_name, t.description, s.name as server_name,
+      `SELECT ltr.trunk_id, ltr.registered_server_id, ltr.status, ltr.ip_address, ltr.polled_at,
+              t.name as trunk_name, t.description, s.name as server_name,
               dp.name as device_pool_name, cmg.name as cm_group_name
-       FROM trunk_snapshots ts
-       JOIN trunks t ON ts.trunk_id = t.id
-       LEFT JOIN servers s ON ts.registered_server_id = s.id
+       FROM latest_trunk_registrations ltr
+       JOIN trunks t ON ltr.trunk_id = t.id
+       LEFT JOIN servers s ON ltr.registered_server_id = s.id
        LEFT JOIN device_pools dp ON t.device_pool_id = dp.id
-       LEFT JOIN cm_groups cmg ON dp.cm_group_id = cmg.id
-       WHERE ts.polled_at = (
-         SELECT MAX(ts2.polled_at) FROM trunk_snapshots ts2 WHERE ts2.trunk_id = ts.trunk_id
-       )`
+       LEFT JOIN cm_groups cmg ON dp.cm_group_id = cmg.id`
     )
     .all();
 }
@@ -418,13 +427,10 @@ export function getLatestTrunkRegistrations() {
 export function getTrunkRegistrationStats() {
   return getDb()
     .prepare(
-      `SELECT s.name as server_name, ts.status, COUNT(*) as count
-       FROM trunk_snapshots ts
-       LEFT JOIN servers s ON ts.registered_server_id = s.id
-       WHERE ts.polled_at = (
-         SELECT MAX(ts2.polled_at) FROM trunk_snapshots ts2 WHERE ts2.trunk_id = ts.trunk_id
-       )
-       GROUP BY s.name, ts.status`
+      `SELECT s.name as server_name, ltr.status, COUNT(*) as count
+       FROM latest_trunk_registrations ltr
+       LEFT JOIN servers s ON ltr.registered_server_id = s.id
+       GROUP BY s.name, ltr.status`
     )
     .all();
 }
@@ -458,12 +464,11 @@ export function deleteSubnet(id: number) {
 export function getPhonesWithIps() {
   return getDb()
     .prepare(
-      `SELECT p.id, p.name, dp.name as device_pool_name, cmg.name as cm_group_name, rs.ip_address
+      `SELECT p.id, p.name, dp.name as device_pool_name, cmg.name as cm_group_name, lr.ip_address
        FROM phones p
        LEFT JOIN device_pools dp ON p.device_pool_id = dp.id
        LEFT JOIN cm_groups cmg ON dp.cm_group_id = cmg.id
-       LEFT JOIN registration_snapshots rs ON rs.phone_id = p.id
-         AND rs.polled_at = (SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = p.id)
+       LEFT JOIN latest_registrations lr ON lr.phone_id = p.id
        ORDER BY p.name`
     )
     .all();

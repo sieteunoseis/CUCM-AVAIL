@@ -75,6 +75,22 @@ CREATE TABLE IF NOT EXISTS subnets (
   created_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS latest_registrations (
+  phone_id INTEGER PRIMARY KEY REFERENCES phones(id),
+  registered_server_id INTEGER REFERENCES servers(id),
+  status TEXT NOT NULL,
+  ip_address TEXT DEFAULT '',
+  polled_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS latest_trunk_registrations (
+  trunk_id INTEGER PRIMARY KEY REFERENCES trunks(id),
+  registered_server_id INTEGER REFERENCES servers(id),
+  status TEXT NOT NULL,
+  ip_address TEXT DEFAULT '',
+  polled_at TEXT DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_reg_latest ON registration_snapshots(phone_id, polled_at DESC);
 CREATE INDEX IF NOT EXISTS idx_phones_pool ON phones(device_pool_id);
 CREATE INDEX IF NOT EXISTS idx_cmg_members ON cm_group_members(cm_group_id, priority);

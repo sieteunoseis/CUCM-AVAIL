@@ -8,6 +8,7 @@ import {
 } from "../db/queries.js";
 import { getDb } from "../db/database.js";
 import { matchSubnet, type SubnetRow } from "../utils/subnet.js";
+import { getCached, setCache, invalidateCache } from "../services/cache.service.js";
 
 const router = Router();
 
@@ -26,6 +27,7 @@ router.post("/", (req, res) => {
   }
   try {
     const result = createSubnet(cidr, name, description || "");
+    invalidateCache("subnet:");
     res.json({ id: result.lastInsertRowid, cidr, name, description });
   } catch (e: any) {
     if (e.message?.includes("UNIQUE")) {
@@ -40,17 +42,25 @@ router.post("/", (req, res) => {
 router.put("/:id", (req, res) => {
   const { cidr, name, description } = req.body;
   updateSubnet(parseInt(req.params.id, 10), cidr, name, description || "");
+  invalidateCache("subnet:");
   res.json({ ok: true });
 });
 
 // DELETE subnet
 router.delete("/:id", (req, res) => {
   deleteSubnet(parseInt(req.params.id, 10));
+  invalidateCache("subnet:");
   res.json({ ok: true });
 });
 
 // GET subnet distribution — phones per subnet per CMG
 router.get("/distribution", (_req, res) => {
+  const cached = getCached("subnet:distribution");
+  if (cached) {
+    res.json(cached);
+    return;
+  }
+
   const subnets = getAllSubnets() as SubnetRow[];
   const phones = getPhonesWithIps() as any[];
 
@@ -86,12 +96,14 @@ router.get("/distribution", (_req, res) => {
     }
   }
 
-  res.json({
+  const result = {
     subnets: Object.values(distribution),
     unmapped,
     unmappedCmGroups,
     totalPhones: phones.length,
-  });
+  };
+  setCache("subnet:distribution", result);
+  res.json(result);
 });
 
 // GET discover subnets — scan phone IPs and find missing /24 subnets
@@ -213,27 +225,13 @@ router.get("/scrape/preview", (req, res) => {
     "Cisco Webex", "Cisco Webex Teams"];
   const placeholders = nonScrapeableModels.map(() => "?").join(",");
 
-  let query: string;
-  if (all) {
-    query = `SELECT p.model, COUNT(*) as count
-             FROM phones p
-             JOIN registration_snapshots rs ON rs.phone_id = p.id
-               AND rs.polled_at = (SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = p.id)
-               AND rs.status IN ('Registered', 'registered')
-             WHERE p.model NOT IN (${placeholders})
-               AND rs.ip_address <> ''
-             GROUP BY p.model ORDER BY count DESC`;
-  } else {
-    // Only unmapped phones (no subnet match)
-    query = `SELECT p.model, COUNT(*) as count
-             FROM phones p
-             JOIN registration_snapshots rs ON rs.phone_id = p.id
-               AND rs.polled_at = (SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = p.id)
-               AND rs.status IN ('Registered', 'registered')
-             WHERE p.model NOT IN (${placeholders})
-               AND rs.ip_address <> ''
-             GROUP BY p.model ORDER BY count DESC`;
-  }
+  const query = `SELECT p.model, COUNT(*) as count
+           FROM phones p
+           JOIN latest_registrations lr ON lr.phone_id = p.id
+             AND lr.status IN ('Registered', 'registered')
+           WHERE p.model NOT IN (${placeholders})
+             AND lr.ip_address <> ''
+           GROUP BY p.model ORDER BY count DESC`;
 
   const rows = db.prepare(query).all(...nonScrapeableModels) as { model: string; count: number }[];
   const byModel: Record<string, number> = {};
@@ -261,14 +259,13 @@ router.get("/shared-ips", (_req, res) => {
   const db = getDb();
   const rows = db
     .prepare(
-      `SELECT rs.ip_address, COUNT(DISTINCT rs.phone_id) as phone_count,
+      `SELECT lr.ip_address, COUNT(DISTINCT lr.phone_id) as phone_count,
               GROUP_CONCAT(DISTINCT p.name) as phone_names
-       FROM registration_snapshots rs
-       JOIN phones p ON rs.phone_id = p.id
-       WHERE rs.ip_address <> ''
-         AND rs.polled_at = (SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = rs.phone_id)
-       GROUP BY rs.ip_address
-       HAVING COUNT(DISTINCT rs.phone_id) > 1
+       FROM latest_registrations lr
+       JOIN phones p ON lr.phone_id = p.id
+       WHERE lr.ip_address <> ''
+       GROUP BY lr.ip_address
+       HAVING COUNT(DISTINCT lr.phone_id) > 1
        ORDER BY phone_count DESC`
     )
     .all();
