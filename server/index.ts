@@ -55,8 +55,12 @@ app.get("/api/poll/status", (_req, res) => {
 });
 
 // Serve static frontend in production
-const clientDist = join(__dirname, "../../client/dist");
-if (existsSync(clientDist)) {
+const clientDistCandidates = [
+  join(__dirname, "../client/dist"),   // Docker: /app/server/../client/dist
+  join(__dirname, "../../client/dist"), // Local build: dist/server/../../client/dist
+];
+const clientDist = clientDistCandidates.find((p) => existsSync(p));
+if (clientDist) {
   app.use(express.static(clientDist));
   app.get("*", (_req, res) => {
     res.sendFile(join(clientDist, "index.html"));
