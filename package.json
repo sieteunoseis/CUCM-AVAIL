@@ -7,7 +7,7 @@
     "dev": "DISABLE_POLLER=true tsx watch server/index.ts & cd client && npx vite --clearScreen false",
     "dev:full": "tsx watch server/index.ts & cd client && npx vite --clearScreen false",
     "build:client": "cd client && npm run build",
-    "build": "npm run build:client && tsc -p tsconfig.json",
+    "build": "npm run build:client && tsc -p tsconfig.json && cp server/db/schema.sql dist/server/db/schema.sql",
     "start": "node dist/server/index.js",
     "sync": "tsx server/scripts/sync.ts",
     "docker:build": "docker build -t cucm-availability .",
