@@ -1,20 +1,22 @@
-import type { Server } from "../api/client";
+import type { Server, FailoverEntry, CmGroup } from "../api/client";
 import StatusIndicator from "./StatusIndicator";
 
 interface Props {
   server: Server;
   phoneCount?: number;
   compact?: boolean;
+  groups?: CmGroup[];
+  failover?: FailoverEntry[];
 }
 
-export default function ServerCard({ server, phoneCount, compact }: Props) {
+export default function ServerCard({ server, phoneCount, compact, groups, failover }: Props) {
   const active = server.ccm_service_active === 1;
   const isPublisher = server.node_type === "Publisher";
 
   if (compact) {
     return (
       <div
-        className={`relative overflow-hidden rounded-lg border px-5 py-4 transition-all duration-300 ${
+        className={`relative overflow-hidden border px-4 py-3 transition-all duration-300 ${
           active
             ? "border-noc-green/20 bg-noc-surface"
             : "border-noc-border bg-noc-surface/50"
@@ -35,7 +37,7 @@ export default function ServerCard({ server, phoneCount, compact }: Props) {
                 <span className="font-mono text-sm font-medium text-noc-text-bright truncate">
                   {server.name.split(".")[0]}
                 </span>
-                <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
+                <span className="shrink-0 px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
                   {isPublisher ? "PUB" : "SUB"}
                 </span>
               </div>
@@ -60,63 +62,51 @@ export default function ServerCard({ server, phoneCount, compact }: Props) {
     );
   }
 
+  // Full pane content view (used inside tabbed window)
   return (
-    <div
-      className={`relative overflow-hidden rounded-lg border p-5 transition-all duration-300 ${
-        active
-          ? "border-noc-green/20 bg-noc-surface"
-          : "border-noc-red/20 bg-noc-surface"
-      }`}
-    >
-      <div
-        className={`absolute top-0 left-0 right-0 h-px ${
-          active
-            ? "bg-gradient-to-r from-transparent via-noc-green/60 to-transparent"
-            : "bg-gradient-to-r from-transparent via-noc-red/60 to-transparent"
-        }`}
-      />
-
-      <div className="flex items-start justify-between mb-3">
+    <div className="p-5">
+      <div className="flex items-start justify-between mb-4">
         <div>
-          <span className="inline-block px-2.5 py-1 rounded text-[10px] font-mono font-semibold uppercase tracking-widest mb-2 bg-noc-border text-noc-text-dim">
+          <span className="inline-block px-2 py-0.5 text-[10px] font-mono font-semibold uppercase tracking-widest mb-2 bg-noc-border text-noc-text-dim">
             {isPublisher ? "PUB" : "SUB"}
           </span>
-          <h3 className="font-mono text-base font-medium text-noc-text-bright truncate max-w-[240px]">
+          <h3 className="font-mono text-lg font-medium text-noc-text-bright">
             {server.name.split(".")[0]}
           </h3>
         </div>
         <StatusIndicator active={active} size="lg" />
       </div>
 
-      <div className="space-y-2 text-xs">
-        <div className="flex justify-between gap-4">
-          <span className="text-noc-text-dim font-mono shrink-0">FQDN</span>
-          <span className="font-mono text-noc-text truncate" title={server.hostname}>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-noc-border">
+        <div className="bg-noc-surface px-4 py-3">
+          <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-1">FQDN</div>
+          <div className="font-mono text-xs text-noc-text-bright truncate" title={server.hostname}>
             {server.hostname}
-          </span>
+          </div>
         </div>
-        <div className="flex justify-between gap-4">
-          <span className="text-noc-text-dim font-mono shrink-0">CCM SVC</span>
-          <span
-            className={`font-mono font-semibold ${active ? "text-noc-green" : "text-noc-red"}`}
-          >
+        <div className="bg-noc-surface px-4 py-3">
+          <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-1">CCM SVC</div>
+          <div className={`font-mono text-xs font-semibold ${active ? "text-noc-green" : "text-noc-red"}`}>
             {active ? "STARTED" : "STOPPED"}
-          </span>
+          </div>
         </div>
-        {phoneCount !== undefined && (
-          <div className="flex justify-between gap-4">
-            <span className="text-noc-text-dim font-mono shrink-0">PHONES</span>
-            <span className="font-mono text-noc-amber font-semibold">{phoneCount}</span>
+        <div className="bg-noc-surface px-4 py-3">
+          <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-1">PRIMARY FOR</div>
+          <div className="font-mono text-xs text-noc-cyan font-semibold">
+            {groups ? groups.filter((g) => g.members.some((m) => m.server_name === server.name && m.priority === 1)).length : 0} CMGs
           </div>
-        )}
-        {server.last_checked_at && (
-          <div className="flex justify-between gap-4">
-            <span className="text-noc-text-dim font-mono shrink-0">CHECKED</span>
-            <span className="font-mono text-noc-text-dim">
-              {new Date(server.last_checked_at + "Z").toLocaleTimeString()}
-            </span>
-          </div>
-        )}
+        </div>
+        <div className="bg-noc-surface px-4 py-3">
+          <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-1">FAILOVER</div>
+          {(() => {
+            const count = failover ? failover.filter((f) => f.registered_server === server.name).reduce((s, f) => s + f.count, 0) : 0;
+            return (
+              <div className={`font-mono text-xs font-semibold ${count > 0 ? "text-noc-amber" : "text-noc-green"}`}>
+                {count > 0 ? `${count.toLocaleString()} phones` : "None"}
+              </div>
+            );
+          })()}
+        </div>
       </div>
     </div>
   );

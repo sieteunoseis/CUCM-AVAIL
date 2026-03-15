@@ -1,0 +1,17 @@
+services:
+  cucm-avail:
+    image: ghcr.io/sieteunoseis/cucm-avail:latest
+    container_name: cucm-avail
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env
+    volumes:
+      - cucm-data:/data
+    environment:
+      - DB_PATH=/data/cucm.db
+      - NODE_TLS_REJECT_UNAUTHORIZED=0
+
+volumes:
+  cucm-data:

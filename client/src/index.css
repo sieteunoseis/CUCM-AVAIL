@@ -31,6 +31,29 @@
 html {
   background: var(--color-noc-bg);
   color: var(--color-noc-text);
+  color-scheme: dark;
+}
+
+/* ─── Light theme override ─── */
+html[data-theme="light"] {
+  --color-noc-bg: #e8e0d4;
+  --color-noc-surface: #f2ece3;
+  --color-noc-panel: #ddd5c8;
+  --color-noc-border: #c4b9a8;
+  --color-noc-border-bright: #a89a86;
+  --color-noc-text: #3a352e;
+  --color-noc-text-dim: #7a7062;
+  --color-noc-text-bright: #1e1b17;
+  --color-noc-amber: #b86e00;
+  --color-noc-amber-dim: #8a5200;
+  --color-noc-green: #008a3e;
+  --color-noc-green-dim: #006830;
+  --color-noc-red: #c42020;
+  --color-noc-red-dim: #901818;
+  --color-noc-blue: #1565c0;
+  --color-noc-blue-dim: #0d4a8a;
+  --color-noc-cyan: #00838f;
+  color-scheme: light;
 }
 
 body {
@@ -55,7 +78,17 @@ body {
   );
 }
 
-/* Scrollbar styling */
+html[data-theme="light"] #root::before {
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, 0.015) 2px,
+    rgba(0, 0, 0, 0.015) 4px
+  );
+}
+
+/* Scrollbar — square for tmux feel */
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -65,7 +98,81 @@ body {
 }
 ::-webkit-scrollbar-thumb {
   background: var(--color-noc-border-bright);
-  border-radius: 3px;
+}
+
+/* Tmux pane — resizable panels */
+.pane-resize {
+  resize: vertical;
+  overflow: auto;
+  min-height: 6rem;
+}
+
+/* Tmux pane title with box-drawing decoration */
+.tmux-title {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.75rem;
+  border-bottom: 1px solid var(--color-noc-border);
+  background: var(--color-noc-panel);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+.tmux-title::before {
+  content: "─┤";
+  color: var(--color-noc-border-bright);
+}
+
+.tmux-title::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(to right, var(--color-noc-border-bright), transparent);
+  margin-left: 0.5rem;
+}
+
+/* Tmux status bar sections */
+.tmux-status-section {
+  display: inline-flex;
+  align-items: center;
+  padding: 0 0.5rem;
+  height: 100%;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.05em;
+}
+
+/* Tmux tab in header */
+.tmux-tab {
+  padding: 0.125rem 0.625rem;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: background-color 0.15s, color 0.15s;
+  border: none;
+  background: none;
+  white-space: nowrap;
+  color: inherit;
+}
+
+.tmux-tab:hover {
+  background: rgba(0, 0, 0, 0.06);
+}
+
+html[data-theme="light"] .tmux-tab:hover {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.tmux-tab.active {
+  background: rgba(240, 168, 48, 0.12);
+  color: var(--color-noc-amber);
+}
+
+html[data-theme="light"] .tmux-tab.active {
+  background: rgba(196, 122, 16, 0.15);
 }
 
 @keyframes pulse-green {
@@ -77,10 +184,90 @@ body {
   50% { box-shadow: 0 0 8px var(--color-noc-red), 0 0 20px rgba(255, 61, 61, 0.5); }
 }
 @keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(12px); }
+  from { opacity: 0; transform: translateY(8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
 .animate-pulse-green { animation: pulse-green 2s ease-in-out infinite; }
 .animate-pulse-red { animation: pulse-red 1.5s ease-in-out infinite; }
-.animate-fade-in-up { animation: fade-in-up 0.4s ease-out both; }
+.animate-fade-in-up { animation: fade-in-up 0.3s ease-out both; }
+
+/* Light theme: softer glows */
+html[data-theme="light"] .animate-pulse-green {
+  animation: none;
+  box-shadow: 0 0 3px var(--color-noc-green);
+}
+html[data-theme="light"] .animate-pulse-red {
+  animation: none;
+  box-shadow: 0 0 3px var(--color-noc-red);
+}
+
+/* Dark-themed datetime-local inputs */
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.7) sepia(0.3) hue-rotate(170deg);
+  cursor: pointer;
+}
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+  filter: invert(0.85) sepia(0.4) hue-rotate(10deg) brightness(1.2);
+}
+
+html[data-theme="light"] input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: none;
+}
+
+/* Dark-themed range slider */
+input[type="range"] {
+  -webkit-appearance: none;
+  appearance: none;
+  background: var(--color-noc-border);
+  height: 4px;
+  outline: none;
+}
+input[type="range"]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  background: var(--color-noc-cyan);
+  border: none;
+  cursor: pointer;
+}
+input[type="range"]::-webkit-slider-thumb:hover {
+  background: #33ecff;
+  box-shadow: 0 0 6px rgba(0, 229, 255, 0.5);
+}
+input[type="range"]::-moz-range-thumb {
+  width: 14px;
+  height: 14px;
+  background: var(--color-noc-cyan);
+  border: none;
+  cursor: pointer;
+}
+input[type="range"]::-moz-range-track {
+  background: var(--color-noc-border);
+  height: 4px;
+}
+
+/* Theme transition */
+html {
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Theme toggle button */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--color-noc-border);
+  background: transparent;
+  cursor: pointer;
+  color: var(--color-noc-text-dim);
+  transition: color 0.2s, border-color 0.2s;
+  padding: 0;
+}
+.theme-toggle:hover {
+  color: var(--color-noc-amber);
+  border-color: var(--color-noc-amber);
+}

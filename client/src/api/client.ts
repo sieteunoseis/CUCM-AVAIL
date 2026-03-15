@@ -84,6 +84,25 @@ export interface PollStatus {
   intervalMinutes: number;
 }
 
+export interface FailoverEntry {
+  cm_group_name: string;
+  registered_server: string;
+  primary_server: string;
+  registered_priority: number | null;
+  count: number;
+}
+
+export interface FailoverDetail {
+  phone_name: string;
+  model: string;
+  device_pool_name: string;
+  cm_group_name: string;
+  ip_address: string;
+  registered_server: string;
+  primary_server: string;
+  registered_priority: number | null;
+}
+
 export interface PhoneMovement {
   phoneName: string;
   currentServer: string | null;
@@ -133,6 +152,13 @@ export interface SubnetDistribution {
   totalPhones: number;
 }
 
+export interface AvailabilityGroup {
+  label: string;
+  servers: string[];
+  cmgNames: string[];
+  phoneCount: number;
+}
+
 export interface UpgradeStep {
   stepNumber: number;
   serverId: number;
@@ -148,6 +174,7 @@ export interface UpgradeStep {
     phonesReRegistering: number;
     phonesUnregistered: number;
   }[];
+  agLabels: string[];
   notes: string[];
   estimatedMinutes: { min: number; max: number };
 }
@@ -158,6 +185,7 @@ export interface ParallelGroup {
   combinedReRegistering: number;
   combinedUnregistered: number;
   estimatedMinutes: { min: number; max: number };
+  agLabels: string[];
   notes: string[];
 }
 
@@ -166,6 +194,7 @@ export interface UpgradeAnalysis {
   totalServers: number;
   steps: UpgradeStep[];
   parallelGroups: ParallelGroup[];
+  availabilityGroups: AvailabilityGroup[];
   summary: {
     maxConcurrentReRegistrations: number;
     totalPhones: number;
@@ -191,20 +220,33 @@ export interface DevicePoolBreakdown {
   subnetDistribution: { name: string; cidr: string; count: number }[];
   unmappedSubnet: number;
   modelDistribution: { model: string; count: number }[];
+  failoverMovements: { currentServer: string; backupServer: string | null; phoneCount: number }[];
+  cmGroupName: string | null;
 }
 
 export interface PlannerServerLoad {
   serverName: string;
   phoneCount: number;
   cmgs: string[];
+  agLabels: string[];
 }
 
 export interface PlannerGeoZone {
   name: string;
   subnetCidrs: string[];
   phoneCount: number;
+  currentCmg: string;
   assignedCmg: string;
   primaryServer: string;
+  agLabel: string;
+}
+
+export interface PhoneStats {
+  totalPhones: number;
+  registeredPhones: number;
+  unregisteredPhones: number;
+  neverSeenPhones: number;
+  stalePhones: number;
 }
 
 export interface PlannerResult {
@@ -219,6 +261,10 @@ export interface PlannerResult {
   geoZones: PlannerGeoZone[];
   unmappedPhones: number;
   totalPhones: number;
+  phoneStats: PhoneStats;
+  rebalanceCmgIds: number[];
+  lockedCmgIds: number[];
+  allCmgs: { id: number; name: string; phoneCount: number; ccmActive: boolean }[];
 }
 
 export interface Trunk {
@@ -277,7 +323,10 @@ export const api = {
   getPhones: (limit = 100, offset = 0) =>
     get<PhonesResponse>(`/api/phones?limit=${limit}&offset=${offset}`),
   getRegStats: () => get<RegStat[]>("/api/registrations/stats"),
+  getFailoverStatus: () => get<FailoverEntry[]>("/api/registrations/failover"),
+  getFailoverDetails: () => get<FailoverDetail[]>("/api/registrations/failover/details"),
   getPollStatus: () => get<PollStatus>("/api/poll/status"),
+  triggerPoll: () => post<{ ok: boolean; message: string }>("/api/poll/trigger"),
   simulate: (disabledServerIds: number[]) =>
     post<SimulationResult>("/api/simulate", { disabledServerIds }),
   sync: () => post<{ servers: number; cmGroups: number; devicePools: number; phones: number }>("/api/sync"),
@@ -290,17 +339,30 @@ export const api = {
     put<{ ok: boolean }>(`/api/subnets/${id}`, { cidr, name, description }),
   deleteSubnet: (id: number) => del<{ ok: boolean }>(`/api/subnets/${id}`),
   getSubnetDistribution: () => get<SubnetDistribution>("/api/subnets/distribution"),
+  discoverSubnets: () =>
+    get<{ discovered: { cidr: string; count: number; suggestedName: string }[]; totalUnmapped: number }>("/api/subnets/discover"),
+  bulkCreateSubnets: (subnets: { cidr: string; name: string }[]) =>
+    post<{ created: number; skipped: number; errors: string[] }>("/api/subnets/discover", { subnets }),
+  parseSubnetMasks: (text: string) =>
+    post<{ discovered: { cidr: string; count: number; suggestedName: string }[]; totalParsed: number }>("/api/subnets/parse-masks", { text }),
+  scrapePreview: (all = false) =>
+    get<{ total: number; byModel: Record<string, number> }>(`/api/subnets/scrape/preview${all ? "?all=true" : ""}`),
+  scrapePhones: (rescrapeAll = false) =>
+    post<{ ok: boolean; message: string }>("/api/subnets/scrape", { rescrapeAll }),
+  scrapeProgress: () =>
+    get<{ total: number; completed: number; found: number; errors: number; status: string }>("/api/subnets/scrape/progress"),
 
   // Device Pools
   getDevicePools: (model?: string) =>
     get<DevicePoolInfo[]>(`/api/devicepools${model ? `?model=${encodeURIComponent(model)}` : ""}`),
-  getDevicePoolBreakdown: (id: number) =>
-    get<DevicePoolBreakdown>(`/api/devicepools/${id}/breakdown`),
+  getDevicePoolBreakdown: (id: number, model?: string) =>
+    get<DevicePoolBreakdown>(`/api/devicepools/${id}/breakdown${model ? `?model=${encodeURIComponent(model)}` : ""}`),
   getPhoneModels: () =>
     get<{ model: string; count: number }[]>("/api/devicepools/models"),
 
   // Planner
-  getPlanner: () => get<PlannerResult>("/api/planner"),
+  getPlanner: (cmgIds?: number[]) =>
+    get<PlannerResult>(`/api/planner${cmgIds ? `?cmgs=${cmgIds.join(",")}` : ""}`),
 
   // Upgrade Analyzer
   getUpgradeAnalysis: () => get<UpgradeAnalysis>("/api/upgrade"),
@@ -310,4 +372,7 @@ export const api = {
   getTrunkRegistrations: () => get<TrunkRegistration[]>("/api/trunks/registrations"),
   getTrunkStats: () =>
     get<{ server_name: string; status: string; count: number }[]>("/api/trunks/stats"),
+
+  // Availability Groups
+  getAvailabilityGroups: () => get<AvailabilityGroup[]>("/api/ag"),
 };

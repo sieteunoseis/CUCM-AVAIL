@@ -213,6 +213,60 @@ export function getRegistrationStats() {
     .all();
 }
 
+export function getFailoverSummary() {
+  return getDb()
+    .prepare(
+      `SELECT
+         cmg.name as cm_group_name,
+         s_reg.name as registered_server,
+         s_pri.name as primary_server,
+         cgm_match.priority as registered_priority,
+         COUNT(*) as count
+       FROM phones p
+       JOIN device_pools dp ON p.device_pool_id = dp.id
+       JOIN cm_groups cmg ON dp.cm_group_id = cmg.id
+       JOIN cm_group_members cgm_pri ON cgm_pri.cm_group_id = cmg.id AND cgm_pri.priority = 1
+       JOIN servers s_pri ON cgm_pri.server_id = s_pri.id
+       JOIN registration_snapshots rs ON rs.phone_id = p.id
+         AND rs.polled_at = (SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = p.id)
+       JOIN servers s_reg ON rs.registered_server_id = s_reg.id
+       LEFT JOIN cm_group_members cgm_match ON cgm_match.cm_group_id = cmg.id AND cgm_match.server_id = s_reg.id
+       WHERE rs.status = 'Registered'
+         AND rs.registered_server_id != cgm_pri.server_id
+       GROUP BY cmg.name, s_reg.name, s_pri.name, cgm_match.priority
+       ORDER BY count DESC`
+    )
+    .all();
+}
+
+export function getFailoverDetails() {
+  return getDb()
+    .prepare(
+      `SELECT
+         p.name as phone_name,
+         p.model,
+         dp.name as device_pool_name,
+         cmg.name as cm_group_name,
+         rs.ip_address,
+         s_reg.name as registered_server,
+         s_pri.name as primary_server,
+         cgm_match.priority as registered_priority
+       FROM phones p
+       JOIN device_pools dp ON p.device_pool_id = dp.id
+       JOIN cm_groups cmg ON dp.cm_group_id = cmg.id
+       JOIN cm_group_members cgm_pri ON cgm_pri.cm_group_id = cmg.id AND cgm_pri.priority = 1
+       JOIN servers s_pri ON cgm_pri.server_id = s_pri.id
+       JOIN registration_snapshots rs ON rs.phone_id = p.id
+         AND rs.polled_at = (SELECT MAX(rs2.polled_at) FROM registration_snapshots rs2 WHERE rs2.phone_id = p.id)
+       JOIN servers s_reg ON rs.registered_server_id = s_reg.id
+       LEFT JOIN cm_group_members cgm_match ON cgm_match.cm_group_id = cmg.id AND cgm_match.server_id = s_reg.id
+       WHERE rs.status = 'Registered'
+         AND rs.registered_server_id != cgm_pri.server_id
+       ORDER BY cmg.name, s_reg.name, p.name`
+    )
+    .all();
+}
+
 export function pruneOldSnapshots(daysToKeep = 7) {
   return getDb()
     .prepare(

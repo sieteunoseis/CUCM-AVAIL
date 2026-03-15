@@ -7,3 +7,6 @@ data/
 prod.env
 .env
 .DS_Store
+
+/net-commander
+missing-subnets.md

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import type { UpgradeAnalysis, UpgradeStep, ParallelGroup } from "../api/client";
+import { AgBadge, getAgColor } from "../components/AgBadge";
 
 function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60);
@@ -22,13 +23,19 @@ function formatTime(date: Date): string {
   });
 }
 
+function localISOString(date: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export default function Upgrade() {
   const [analysis, setAnalysis] = useState<UpgradeAnalysis | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedStep, setExpandedStep] = useState<number | null>(null);
   const [expandedGroup, setExpandedGroup] = useState<number | null>(null);
-  const [startTime, setStartTime] = useState<string>("");
+  const [startTime, setStartTime] = useState<string>(() => localISOString(new Date()));
   const [mode, setMode] = useState<"sequential" | "parallel">("sequential");
+  const [maxPerGroup, setMaxPerGroup] = useState(0); // 0 = unlimited
 
   useEffect(() => {
     api
@@ -53,7 +60,7 @@ export default function Upgrade() {
 
   if (!analysis || analysis.steps.length === 0) {
     return (
-      <div className="text-center py-12 border border-dashed border-noc-border rounded-lg">
+      <div className="text-center py-12 border border-dashed border-noc-border">
         <p className="font-mono text-sm text-noc-text-dim">
           No servers found to analyze
         </p>
@@ -62,73 +69,167 @@ export default function Upgrade() {
   }
 
   const isParallel = mode === "parallel";
-  const activeSummary = isParallel ? analysis.parallelSummary : analysis.summary;
+
+  // Re-chunk parallel groups when maxPerGroup is set
+  const constrainedGroups = (() => {
+    if (!isParallel || maxPerGroup === 0) return analysis.parallelGroups;
+    const result: ParallelGroup[] = [];
+    for (const group of analysis.parallelGroups) {
+      if (group.steps.length <= maxPerGroup) {
+        result.push({ ...group, groupNumber: result.length + 1 });
+      } else {
+        for (let i = 0; i < group.steps.length; i += maxPerGroup) {
+          const chunk = group.steps.slice(i, i + maxPerGroup);
+          const combinedReReg = chunk.reduce((s, st) => s + st.phonesReRegistering, 0);
+          const combinedUnreg = chunk.reduce((s, st) => s + st.phonesUnregistered, 0);
+          const estMin = Math.max(...chunk.map((s) => s.estimatedMinutes.min));
+          const estMax = Math.max(...chunk.map((s) => s.estimatedMinutes.max));
+          const notes = chunk.length > 1
+            ? [`${chunk.length} servers upgrading in parallel`, `Servers: ${chunk.map((s) => s.serverName.split(".")[0]).join(", ")}`]
+            : [];
+          const chunkAgLabels = Array.from(new Set(chunk.flatMap((s) => s.agLabels))).sort();
+          result.push({
+            groupNumber: result.length + 1,
+            steps: chunk,
+            combinedReRegistering: combinedReReg,
+            combinedUnregistered: combinedUnreg,
+            estimatedMinutes: { min: estMin, max: estMax },
+            agLabels: chunkAgLabels,
+            notes,
+          });
+        }
+      }
+    }
+    return result;
+  })();
+
+  const constrainedSummary = (() => {
+    if (!isParallel || maxPerGroup === 0) return analysis.parallelSummary;
+    const totalMin = constrainedGroups.reduce((s, g) => s + g.estimatedMinutes.min, 0);
+    const totalMax = constrainedGroups.reduce((s, g) => s + g.estimatedMinutes.max, 0);
+    return {
+      totalGroups: constrainedGroups.length,
+      maxConcurrentReRegistrations: constrainedGroups.length > 0
+        ? Math.max(...constrainedGroups.map((g) => g.combinedReRegistering))
+        : 0,
+      estimatedTotalMinutes: { min: totalMin, max: totalMax },
+    };
+  })();
+
+  const activeSummary = isParallel ? constrainedSummary : analysis.summary;
   const activeTotal = isParallel
-    ? analysis.parallelSummary.estimatedTotalMinutes
+    ? constrainedSummary.estimatedTotalMinutes
     : analysis.summary.estimatedTotalMinutes;
-  const timeSavedMin = analysis.summary.estimatedTotalMinutes.min - analysis.parallelSummary.estimatedTotalMinutes.min;
-  const timeSavedMax = analysis.summary.estimatedTotalMinutes.max - analysis.parallelSummary.estimatedTotalMinutes.max;
+  const timeSavedMin = analysis.summary.estimatedTotalMinutes.min - constrainedSummary.estimatedTotalMinutes.min;
+  const timeSavedMax = analysis.summary.estimatedTotalMinutes.max - constrainedSummary.estimatedTotalMinutes.max;
+
+  // Max possible group size from the server data
+  const maxGroupSize = Math.max(...analysis.parallelGroups.map((g) => g.steps.length), 1);
 
   return (
-    <div className="space-y-10 animate-fade-in-up">
-      <div className="mb-8">
-        <h1 className="font-mono text-xl font-semibold text-noc-text-bright">
+    <div className="space-y-3 animate-fade-in-up">
+      <div className="mb-4">
+        <h1 className="font-mono text-sm font-semibold text-noc-text-bright uppercase tracking-widest">
           Upgrade Sequence Analyzer
         </h1>
-        <p className="text-sm text-noc-text-dim mt-1">
-          Recommended node upgrade order based on Cisco sequencing rules and minimum phone impact.
+        <p className="text-xs text-noc-text-dim mt-1 font-mono">
+          Recommended node upgrade order based on Cisco sequencing rules.
         </p>
       </div>
 
       {/* Mode Toggle */}
       <div className="flex items-center gap-3">
-        <div className="inline-flex rounded-lg border border-noc-border overflow-hidden">
-          <button
-            onClick={() => setMode("sequential")}
-            className={`px-5 py-2.5 font-mono text-xs uppercase tracking-widest transition-all cursor-pointer ${
-              mode === "sequential"
-                ? "bg-noc-amber/10 text-noc-amber border-r border-noc-border"
-                : "bg-noc-surface text-noc-text-dim hover:text-noc-text border-r border-noc-border"
+        <label className="font-mono text-[10px] uppercase tracking-widest text-noc-text-dim shrink-0">
+          Mode
+        </label>
+        <button
+          onClick={() => setMode(isParallel ? "sequential" : "parallel")}
+          className="relative h-7 shrink-0 cursor-pointer bg-noc-bg border border-noc-border rounded"
+          style={{ width: "11rem" }}
+        >
+          {/* Sliding highlight */}
+          <div
+            className={`absolute top-0.5 bottom-0.5 rounded-sm transition-all duration-200 ease-in-out ${
+              isParallel ? "bg-noc-cyan" : "bg-noc-amber"
             }`}
-          >
-            Sequential
-          </button>
-          <button
-            onClick={() => setMode("parallel")}
-            className={`px-5 py-2.5 font-mono text-xs uppercase tracking-widest transition-all cursor-pointer ${
-              mode === "parallel"
-                ? "bg-noc-cyan/10 text-noc-cyan"
-                : "bg-noc-surface text-noc-text-dim hover:text-noc-text"
-            }`}
-          >
-            Parallel
-          </button>
-        </div>
+            style={{
+              left: isParallel ? "calc(50% + 1px)" : "2px",
+              width: isParallel ? "calc(50% - 3px)" : "calc(50% - 3px)",
+            }}
+          />
+          {/* Labels */}
+          <div className="relative z-10 flex h-full">
+            <div className={`w-1/2 flex items-center justify-center font-mono text-[9px] font-bold uppercase tracking-wider select-none transition-colors ${
+              !isParallel ? "text-noc-bg" : "text-noc-text-dim"
+            }`}>
+              sequential
+            </div>
+            <div className={`w-1/2 flex items-center justify-center font-mono text-[9px] font-bold uppercase tracking-wider select-none transition-colors ${
+              isParallel ? "text-noc-bg" : "text-noc-text-dim"
+            }`}>
+              parallel
+            </div>
+          </div>
+        </button>
         {timeSavedMin > 0 && (
-          <span className="font-mono text-xs text-noc-green">
+          <span className="font-mono text-[10px] text-noc-green uppercase tracking-widest">
             Parallel saves {formatDuration(timeSavedMin)}–{formatDuration(timeSavedMax)}
           </span>
         )}
       </div>
 
+      {/* Max Concurrency Slider (parallel mode only) */}
+      {isParallel && maxGroupSize > 1 && (
+        <div className="border border-noc-border bg-noc-surface p-4">
+          <div className="flex items-center gap-4 flex-wrap">
+            <label className="font-mono text-[10px] uppercase tracking-widest text-noc-text-dim shrink-0">
+              Max Servers / Stage
+            </label>
+            <input
+              type="range"
+              min={1}
+              max={maxGroupSize}
+              value={maxPerGroup === 0 ? maxGroupSize : maxPerGroup}
+              onChange={(e) => {
+                const val = Number(e.target.value);
+                setMaxPerGroup(val >= maxGroupSize ? 0 : val);
+              }}
+              className="flex-1 max-w-xs accent-noc-cyan h-1.5 cursor-pointer"
+            />
+            <span className="font-mono text-sm text-noc-cyan font-bold w-16 text-center">
+              {maxPerGroup === 0 ? "Max" : maxPerGroup}
+            </span>
+            {maxPerGroup !== 0 && (
+              <button
+                onClick={() => setMaxPerGroup(0)}
+                className="px-3 py-1.5 border border-noc-border text-[10px] font-mono uppercase tracking-widest text-noc-text-dim hover:text-noc-text transition-all cursor-pointer"
+              >
+                Reset
+              </button>
+            )}
+          </div>
+          {maxPerGroup !== 0 && (
+            <p className="font-mono text-[10px] text-noc-text-dim mt-2">
+              {constrainedGroups.length} stages — limit {maxPerGroup} server{maxPerGroup > 1 ? "s" : ""} per stage
+            </p>
+          )}
+        </div>
+      )}
+
       {/* Summary Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-5">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-px bg-noc-border">
         <StatBox
           label={isParallel ? "Groups" : "Steps"}
-          value={isParallel ? analysis.parallelSummary.totalGroups : analysis.totalSteps}
+          value={isParallel ? constrainedSummary.totalGroups : analysis.totalSteps}
           color="cyan"
         />
-        <StatBox
-          label="Total Servers"
-          value={analysis.totalServers}
-          color="cyan"
-        />
+        <StatBox label="Total Servers" value={analysis.totalServers} color="cyan" />
         <StatBox
           label={isParallel ? "Max Concurrent Re-Reg" : "Max Re-Reg"}
           value={activeSummary.maxConcurrentReRegistrations}
           color="amber"
         />
-        <div className="rounded-lg border bg-noc-surface p-5 text-center border-noc-blue/15">
+        <div className="bg-noc-surface p-4 text-center">
           <div className="font-mono text-lg font-bold text-noc-blue">
             {formatDuration(activeTotal.min)} – {formatDuration(activeTotal.max)}
           </div>
@@ -136,7 +237,7 @@ export default function Upgrade() {
             Est. Total Duration
           </div>
         </div>
-        <div className="rounded-lg border bg-noc-surface p-5 text-center border-noc-green/15">
+        <div className="bg-noc-surface p-4 text-center">
           <div className="font-mono text-3xl font-bold text-noc-green">
             {analysis.summary.totalPhones.toLocaleString()}
           </div>
@@ -148,7 +249,7 @@ export default function Upgrade() {
 
       {/* Comparison Banner (only in parallel mode) */}
       {isParallel && (
-        <div className="rounded-lg border border-noc-cyan/20 bg-noc-cyan/5 p-5">
+        <div className="border border-noc-cyan/20 bg-noc-cyan/5 p-4">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
             <div>
               <div className="font-mono text-[10px] uppercase tracking-widest text-noc-text-dim mb-1">Sequential Duration</div>
@@ -159,25 +260,56 @@ export default function Upgrade() {
             <div>
               <div className="font-mono text-[10px] uppercase tracking-widest text-noc-text-dim mb-1">Parallel Duration</div>
               <div className="font-mono text-sm text-noc-cyan font-bold">
-                {formatDuration(analysis.parallelSummary.estimatedTotalMinutes.min)} – {formatDuration(analysis.parallelSummary.estimatedTotalMinutes.max)}
+                {formatDuration(constrainedSummary.estimatedTotalMinutes.min)} – {formatDuration(constrainedSummary.estimatedTotalMinutes.max)}
               </div>
             </div>
             <div>
               <div className="font-mono text-[10px] uppercase tracking-widest text-noc-text-dim mb-1">Max Concurrent Impact</div>
-              <div className="font-mono text-sm">
-                <span className="text-noc-text-dim">Sequential: </span>
+              <div className="font-mono text-sm flex items-center gap-1 flex-wrap">
+                <span className="text-noc-text-dim">Sequential:</span>
                 <span className="text-noc-amber">{analysis.summary.maxConcurrentReRegistrations.toLocaleString()}</span>
-                <span className="text-noc-text-dim mx-2">vs</span>
-                <span className="text-noc-text-dim">Parallel: </span>
-                <span className="text-noc-amber">{analysis.parallelSummary.maxConcurrentReRegistrations.toLocaleString()}</span>
+                <span className="text-noc-text-dim mx-1">vs</span>
+                <span className="text-noc-text-dim">Parallel:</span>
+                <span className="text-noc-amber">{constrainedSummary.maxConcurrentReRegistrations.toLocaleString()}</span>
               </div>
             </div>
           </div>
         </div>
       )}
 
+      {/* AG Overview */}
+      {analysis.availabilityGroups.length > 0 && (
+        <div className="border border-noc-border bg-noc-surface overflow-hidden">
+          <div className="tmux-title text-noc-cyan">Availability Groups</div>
+          <div className="p-4">
+            <div className="flex flex-wrap gap-2">
+              {analysis.availabilityGroups.map((ag) => {
+                const c = getAgColor(ag.label);
+                return (
+                  <div key={ag.label} className={`border border-noc-border/50 ${c.bg} px-3 py-2`}>
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className={`w-2 h-2 ${c.dot}`} />
+                      <span className={`font-mono text-xs font-bold ${c.text}`}>{ag.label}</span>
+                      <span className="font-mono text-[10px] text-noc-text-dim">
+                        {ag.phoneCount.toLocaleString()} phones
+                      </span>
+                    </div>
+                    <div className="font-mono text-[10px] text-noc-text-dim">
+                      {ag.servers.join(", ")}
+                    </div>
+                    <div className="font-mono text-[10px] text-noc-text-dim mt-0.5">
+                      {ag.cmgNames.length} CMG{ag.cmgNames.length !== 1 ? "s" : ""}: {ag.cmgNames.join(", ")}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Start Time Picker */}
-      <div className="rounded-lg border border-noc-border bg-noc-surface p-5">
+      <div className="border border-noc-border bg-noc-surface p-4">
         <div className="flex items-center gap-4 flex-wrap">
           <label className="font-mono text-[10px] uppercase tracking-widest text-noc-text-dim shrink-0">
             Maintenance Start
@@ -186,8 +318,14 @@ export default function Upgrade() {
             type="datetime-local"
             value={startTime}
             onChange={(e) => setStartTime(e.target.value)}
-            className="max-w-xs px-4 py-2.5 rounded-lg border border-noc-border bg-noc-bg text-noc-text-bright font-mono text-sm focus:outline-none focus:border-noc-amber/50"
+            className="max-w-xs px-3 py-2 border border-noc-border bg-noc-bg text-noc-text-bright font-mono text-sm focus:outline-none focus:border-noc-amber/50"
           />
+          <button
+            onClick={() => setStartTime(localISOString(new Date()))}
+            className="px-3 py-1.5 border border-noc-border text-[10px] font-mono uppercase tracking-widest text-noc-text-dim hover:text-noc-text transition-all cursor-pointer"
+          >
+            Now
+          </button>
           {startTime && (
             <>
               <span className="font-mono text-xs text-noc-text-dim">→</span>
@@ -198,21 +336,13 @@ export default function Upgrade() {
               </span>
             </>
           )}
-          {startTime && (
-            <button
-              onClick={() => setStartTime("")}
-              className="px-3 py-1.5 rounded border border-noc-border text-[10px] font-mono uppercase tracking-widest text-noc-text-dim hover:text-noc-text transition-all cursor-pointer"
-            >
-              Clear
-            </button>
-          )}
         </div>
       </div>
 
       {/* Steps / Groups */}
       {isParallel ? (
         <ParallelView
-          groups={analysis.parallelGroups}
+          groups={constrainedGroups}
           totalPhones={analysis.summary.totalPhones}
           expandedGroup={expandedGroup}
           setExpandedGroup={setExpandedGroup}
@@ -253,16 +383,8 @@ function SequentialView({
   const startDate = startTime ? new Date(startTime) : null;
 
   return (
-    <div className="rounded-lg border border-noc-border bg-noc-surface overflow-hidden">
-      <div className="px-6 py-4 border-b border-noc-border bg-noc-panel">
-        <h2 className="font-mono text-xs font-semibold uppercase tracking-widest text-noc-amber">
-          Sequential Upgrade Sequence
-        </h2>
-        <p className="text-[10px] font-mono text-noc-text-dim mt-1">
-          Each step assumes the previous server has completed its upgrade and is back online
-        </p>
-      </div>
-
+    <div className="border border-noc-border bg-noc-surface overflow-hidden">
+      <div className="tmux-title text-noc-amber">Sequential Upgrade Sequence</div>
       <div className="divide-y divide-noc-border/50">
         {steps.map((step, idx) => (
           <StepRow
@@ -301,16 +423,8 @@ function ParallelView({
   const startDate = startTime ? new Date(startTime) : null;
 
   return (
-    <div className="rounded-lg border border-noc-border bg-noc-surface overflow-hidden">
-      <div className="px-6 py-4 border-b border-noc-border bg-noc-panel">
-        <h2 className="font-mono text-xs font-semibold uppercase tracking-widest text-noc-cyan">
-          Parallel Upgrade Sequence
-        </h2>
-        <p className="text-[10px] font-mono text-noc-text-dim mt-1">
-          Servers within a group upgrade simultaneously — groups execute sequentially
-        </p>
-      </div>
-
+    <div className="border border-noc-border bg-noc-surface overflow-hidden">
+      <div className="tmux-title text-noc-cyan">Parallel Upgrade Sequence</div>
       <div className="divide-y divide-noc-border/50">
         {groups.map((group, idx) => {
           const isExpanded = expandedGroup === group.groupNumber;
@@ -322,10 +436,10 @@ function ParallelView({
             <div key={group.groupNumber}>
               <button
                 onClick={() => setExpandedGroup(isExpanded ? null : group.groupNumber)}
-                className="w-full flex items-center gap-4 px-6 py-5 hover:bg-noc-panel/50 transition-colors cursor-pointer"
+                className="w-full flex items-center gap-4 px-4 py-3 hover:bg-noc-panel/50 transition-colors cursor-pointer"
               >
                 {/* Group Number */}
-                <div className={`flex items-center justify-center w-10 h-10 rounded-full border shrink-0 ${
+                <div className={`flex items-center justify-center w-8 h-8 border shrink-0 ${
                   isSingle
                     ? "border-noc-border bg-noc-bg"
                     : "border-noc-cyan/30 bg-noc-cyan/5"
@@ -337,7 +451,7 @@ function ParallelView({
                   </span>
                 </div>
 
-                {/* Server Names */}
+                {/* Server Names + AG */}
                 <div className="flex-1 text-left min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     {group.steps.map((step, i) => (
@@ -346,15 +460,18 @@ function ParallelView({
                         <span className="font-mono text-sm font-medium text-noc-text-bright">
                           {step.serverName.split(".")[0]}
                         </span>
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
+                        <span className="px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
                           {step.isPublisher ? "PUB" : "SUB"}
                         </span>
                       </span>
                     ))}
+                    {group.agLabels.map((label) => (
+                      <AgBadge key={label} label={label} />
+                    ))}
                   </div>
                   {!isSingle && (
                     <p className="font-mono text-[10px] text-noc-cyan mt-0.5">
-                      {group.steps.length} servers in parallel — no shared CMGs
+                      {group.steps.length} servers in parallel
                     </p>
                   )}
                   {isSingle && group.steps[0].notes.length > 0 && (
@@ -383,9 +500,7 @@ function ParallelView({
                       <div className="font-mono text-sm font-bold text-noc-amber">
                         {group.combinedReRegistering.toLocaleString()}
                       </div>
-                      <div className="font-mono text-[9px] text-noc-text-dim uppercase">
-                        re-reg
-                      </div>
+                      <div className="font-mono text-[9px] text-noc-text-dim uppercase">re-reg</div>
                     </div>
                   )}
                   {group.combinedUnregistered > 0 && (
@@ -393,22 +508,17 @@ function ParallelView({
                       <div className="font-mono text-sm font-bold text-noc-red">
                         {group.combinedUnregistered.toLocaleString()}
                       </div>
-                      <div className="font-mono text-[9px] text-noc-text-dim uppercase">
-                        down
-                      </div>
+                      <div className="font-mono text-[9px] text-noc-text-dim uppercase">down</div>
                     </div>
                   )}
                   {!hasImpact && (
-                    <span className="font-mono text-xs text-noc-green font-semibold">
-                      NO IMPACT
-                    </span>
+                    <span className="font-mono text-xs text-noc-green font-semibold">NO IMPACT</span>
                   )}
 
-                  {/* Impact bar */}
-                  <div className="w-24 h-2 rounded-full bg-noc-bg overflow-hidden">
+                  <div className="w-24 h-2 bg-noc-bg overflow-hidden">
                     {totalPhones > 0 && (
                       <div
-                        className={`h-full rounded-full transition-all ${
+                        className={`h-full transition-all ${
                           group.combinedUnregistered > 0
                             ? "bg-noc-red"
                             : group.combinedReRegistering > 0
@@ -426,9 +536,7 @@ function ParallelView({
                   </div>
 
                   <svg
-                    className={`w-4 h-4 text-noc-text-dim transition-transform ${
-                      isExpanded ? "rotate-180" : ""
-                    }`}
+                    className={`w-4 h-4 text-noc-text-dim transition-transform ${isExpanded ? "rotate-180" : ""}`}
                     fill="none"
                     viewBox="0 0 24 24"
                     stroke="currentColor"
@@ -438,9 +546,8 @@ function ParallelView({
                 </div>
               </button>
 
-              {/* Expanded: show individual steps */}
               {isExpanded && (
-                <div className="px-6 pb-5 space-y-4">
+                <div className="px-4 pb-4 space-y-4">
                   {group.notes.length > 0 && (
                     <div className="space-y-1">
                       {group.notes.map((note, i) => (
@@ -453,56 +560,56 @@ function ParallelView({
                   )}
 
                   {group.steps.map((step) => (
-                    <div key={step.serverId} className="rounded-lg border border-noc-border/50 bg-noc-bg/50 p-4 space-y-3">
+                    <div key={step.serverId} className="border border-noc-border/50 bg-noc-bg/50 p-4 space-y-3">
                       <div className="flex items-center gap-3">
                         <span className="font-mono text-sm font-semibold text-noc-text-bright">
                           {step.serverName.split(".")[0]}
                         </span>
-                        <span className="px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
+                        <span className="px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
                           {step.isPublisher ? "PUB" : step.isCcmActive ? "CCM" : "NON-CCM"}
                         </span>
+                        {step.agLabels.map((label) => (
+                          <AgBadge key={label} label={label} />
+                        ))}
                         <span className="font-mono text-xs text-noc-blue">
                           {formatDuration(step.estimatedMinutes.min)}–{formatDuration(step.estimatedMinutes.max)}
                         </span>
                       </div>
 
-                      {/* Stats row */}
-                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                        <div className="px-3 py-2 rounded border border-noc-border bg-noc-bg">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-noc-border">
+                        <div className="px-3 py-2 bg-noc-bg">
                           <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-0.5">FQDN</div>
                           <div className="font-mono text-xs text-noc-text-bright truncate">{step.serverHostname}</div>
                         </div>
-                        <div className="px-3 py-2 rounded border border-noc-green/20 bg-noc-green/5">
+                        <div className="px-3 py-2 bg-noc-green/5">
                           <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-0.5">Unaffected</div>
                           <div className="font-mono text-sm text-noc-green font-bold">{step.phonesUnaffected.toLocaleString()}</div>
                         </div>
-                        <div className="px-3 py-2 rounded border border-noc-amber/20 bg-noc-amber/5">
+                        <div className="px-3 py-2 bg-noc-amber/5">
                           <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-0.5">Re-Registering</div>
                           <div className="font-mono text-sm text-noc-amber font-bold">{step.phonesReRegistering.toLocaleString()}</div>
                         </div>
-                        <div className="px-3 py-2 rounded border border-noc-red/20 bg-noc-red/5">
+                        <div className="px-3 py-2 bg-noc-red/5">
                           <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-0.5">Unregistered</div>
                           <div className="font-mono text-sm text-noc-red font-bold">{step.phonesUnregistered.toLocaleString()}</div>
                         </div>
                       </div>
 
-                      {/* Notes */}
                       {step.notes.length > 0 && (
                         <div className="space-y-0.5">
                           {step.notes.map((note, i) => (
                             <div key={i} className={`flex items-start gap-2 font-mono text-[11px] ${
                               note.startsWith("WARNING") ? "text-noc-red" : "text-noc-text-dim"
                             }`}>
-                              <span className="shrink-0 mt-0.5">{note.startsWith("WARNING") ? "⚠" : "→"}</span>
+                              <span className="shrink-0 mt-0.5">{note.startsWith("WARNING") ? "!" : "→"}</span>
                               <span>{note}</span>
                             </div>
                           ))}
                         </div>
                       )}
 
-                      {/* Affected CMGs */}
                       {step.affectedCmGroups.length > 0 && (
-                        <div className="overflow-x-auto rounded border border-noc-border/50">
+                        <div className="overflow-x-auto border border-noc-border/50">
                           <table className="w-full text-xs">
                             <thead>
                               <tr className="border-b border-noc-border/50 text-noc-text-dim">
@@ -558,10 +665,10 @@ function StepRow({
     <div>
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-4 px-6 py-5 hover:bg-noc-panel/50 transition-colors cursor-pointer"
+        className="w-full flex items-center gap-4 px-4 py-3 hover:bg-noc-panel/50 transition-colors cursor-pointer"
       >
         {/* Step Number */}
-        <div className="flex items-center justify-center w-10 h-10 rounded-full border border-noc-border bg-noc-bg shrink-0">
+        <div className="flex items-center justify-center w-8 h-8 border border-noc-border bg-noc-bg shrink-0">
           <span className="font-mono text-sm font-bold text-noc-text-bright">
             {step.stepNumber}
           </span>
@@ -573,9 +680,12 @@ function StepRow({
             <span className="font-mono text-sm font-medium text-noc-text-bright truncate">
               {step.serverName.split(".")[0]}
             </span>
-            <span className="shrink-0 px-1.5 py-0.5 rounded text-[9px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
+            <span className="shrink-0 px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
               {step.isPublisher ? "PUB" : "SUB"}
             </span>
+            {step.agLabels.map((label) => (
+              <AgBadge key={label} label={label} />
+            ))}
           </div>
           {step.notes.length > 0 && (
             <p className="font-mono text-[10px] text-noc-text-dim mt-0.5 truncate">
@@ -618,10 +728,10 @@ function StepRow({
             <span className="font-mono text-xs text-noc-green font-semibold">NO IMPACT</span>
           )}
 
-          <div className="w-24 h-2 rounded-full bg-noc-bg overflow-hidden">
+          <div className="w-24 h-2 bg-noc-bg overflow-hidden">
             {totalPhones > 0 && (
               <div
-                className={`h-full rounded-full transition-all ${
+                className={`h-full transition-all ${
                   step.phonesUnregistered > 0
                     ? "bg-noc-red"
                     : step.phonesReRegistering > 0
@@ -649,23 +759,22 @@ function StepRow({
         </div>
       </button>
 
-      {/* Expanded Details */}
       {isExpanded && (
-        <div className="px-6 pb-5 space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-            <div className="px-4 py-3 rounded-lg border border-noc-border bg-noc-bg">
+        <div className="px-4 pb-4 space-y-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-noc-border">
+            <div className="px-3 py-2 bg-noc-bg">
               <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-1">FQDN</div>
               <div className="font-mono text-xs text-noc-text-bright truncate">{step.serverHostname}</div>
             </div>
-            <div className="px-4 py-3 rounded-lg border border-noc-green/20 bg-noc-green/5">
+            <div className="px-3 py-2 bg-noc-green/5">
               <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-1">Unaffected</div>
               <div className="font-mono text-sm text-noc-green font-bold">{step.phonesUnaffected.toLocaleString()}</div>
             </div>
-            <div className="px-4 py-3 rounded-lg border border-noc-amber/20 bg-noc-amber/5">
+            <div className="px-3 py-2 bg-noc-amber/5">
               <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-1">Re-Registering</div>
               <div className="font-mono text-sm text-noc-amber font-bold">{step.phonesReRegistering.toLocaleString()}</div>
             </div>
-            <div className="px-4 py-3 rounded-lg border border-noc-red/20 bg-noc-red/5">
+            <div className="px-3 py-2 bg-noc-red/5">
               <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-1">Unregistered</div>
               <div className="font-mono text-sm text-noc-red font-bold">{step.phonesUnregistered.toLocaleString()}</div>
             </div>
@@ -677,7 +786,7 @@ function StepRow({
                 <div key={i} className={`flex items-start gap-2 font-mono text-xs ${
                   note.startsWith("WARNING") ? "text-noc-red" : "text-noc-text-dim"
                 }`}>
-                  <span className="shrink-0 mt-0.5">{note.startsWith("WARNING") ? "⚠" : "→"}</span>
+                  <span className="shrink-0 mt-0.5">{note.startsWith("WARNING") ? "!" : "→"}</span>
                   <span>{note}</span>
                 </div>
               ))}
@@ -685,23 +794,23 @@ function StepRow({
           )}
 
           {step.affectedCmGroups.length > 0 && (
-            <div className="overflow-x-auto rounded-lg border border-noc-border/50">
+            <div className="overflow-x-auto border border-noc-border/50">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="border-b border-noc-border/50 text-noc-text-dim">
-                    <th className="text-left px-4 py-2.5 font-mono font-medium">Affected CMG</th>
-                    <th className="text-right px-4 py-2.5 font-mono font-medium">Re-Registering</th>
-                    <th className="text-right px-4 py-2.5 font-mono font-medium">Unregistered</th>
+                    <th className="text-left px-3 py-2 font-mono font-medium">Affected CMG</th>
+                    <th className="text-right px-3 py-2 font-mono font-medium">Re-Registering</th>
+                    <th className="text-right px-3 py-2 font-mono font-medium">Unregistered</th>
                   </tr>
                 </thead>
                 <tbody>
                   {step.affectedCmGroups.map((cmg) => (
                     <tr key={cmg.cmGroupName} className="border-b border-noc-border/30 hover:bg-noc-panel/30">
-                      <td className="px-4 py-2 font-mono text-noc-text-bright">{cmg.cmGroupName}</td>
-                      <td className="px-4 py-2 text-right font-mono text-noc-amber font-semibold">
+                      <td className="px-3 py-1.5 font-mono text-noc-text-bright">{cmg.cmGroupName}</td>
+                      <td className="px-3 py-1.5 text-right font-mono text-noc-amber font-semibold">
                         {cmg.phonesReRegistering > 0 ? cmg.phonesReRegistering.toLocaleString() : "—"}
                       </td>
-                      <td className="px-4 py-2 text-right font-mono text-noc-red font-semibold">
+                      <td className="px-3 py-1.5 text-right font-mono text-noc-red font-semibold">
                         {cmg.phonesUnregistered > 0 ? cmg.phonesUnregistered.toLocaleString() : "—"}
                       </td>
                     </tr>
@@ -726,18 +835,16 @@ function StatBox({
   color: "amber" | "blue" | "cyan" | "green";
 }) {
   const colors = {
-    amber: "text-noc-amber border-noc-amber/15",
-    blue: "text-noc-blue border-noc-blue/15",
-    cyan: "text-noc-cyan border-noc-cyan/15",
-    green: "text-noc-green border-noc-green/15",
+    amber: "text-noc-amber",
+    blue: "text-noc-blue",
+    cyan: "text-noc-cyan",
+    green: "text-noc-green",
   };
 
   return (
-    <div className={`rounded-lg border bg-noc-surface p-5 text-center ${colors[color]}`}>
-      <div className="font-mono text-3xl font-bold">{value.toLocaleString()}</div>
-      <div className="font-mono text-[10px] uppercase tracking-widest mt-2 text-noc-text-dim">
-        {label}
-      </div>
+    <div className="bg-noc-surface p-4 text-center">
+      <div className={`font-mono text-3xl font-bold ${colors[color]}`}>{value.toLocaleString()}</div>
+      <div className="font-mono text-[10px] uppercase tracking-widest mt-2 text-noc-text-dim">{label}</div>
     </div>
   );
 }
