@@ -17,10 +17,21 @@ let lastPollTime: Date | null = null;
 let pollInProgress = false;
 
 type PollCallback = () => void;
+type LogCallback = (message: string) => void;
 let onPollComplete: PollCallback | null = null;
+let onPollerLog: LogCallback | null = null;
 
 export function setOnPollComplete(cb: PollCallback) {
   onPollComplete = cb;
+}
+
+export function setOnPollerLog(cb: LogCallback) {
+  onPollerLog = cb;
+}
+
+function emitLog(message: string) {
+  console.log(message);
+  if (onPollerLog) onPollerLog(message);
 }
 
 export function getLastPollTime() {
@@ -33,12 +44,12 @@ export function isPollInProgress() {
 
 export async function runPoll() {
   if (pollInProgress) {
-    console.log("[Poller] Poll already in progress, skipping");
+    emitLog("[Poller] Poll already in progress, skipping");
     return;
   }
 
   pollInProgress = true;
-  console.log("[Poller] Starting poll cycle...");
+  emitLog("[Poller] Starting poll cycle...");
 
   try {
     // 1. Check serviceability status for all servers
@@ -56,7 +67,7 @@ export async function runPoll() {
           updateServerServiceStatus(server.id, isActive);
         }
       }
-      console.log("[Poller] Service status updated for all servers");
+      emitLog("[Poller] Service status updated for all servers");
     }
 
     // 2. Poll RISPort for phone registrations
@@ -85,9 +96,7 @@ export async function runPoll() {
 
     if (snapshots.length > 0) {
       insertRegistrationBatch(snapshots);
-      console.log(
-        `[Poller] Saved ${snapshots.length} registration snapshots`
-      );
+      emitLog(`[Poller] Saved ${snapshots.length} registration snapshots`);
     }
 
     // 3. Poll RISPort for SIP trunk registrations
@@ -117,9 +126,7 @@ export async function runPoll() {
 
       if (trunkSnapshots.length > 0) {
         insertTrunkSnapshotBatch(trunkSnapshots);
-        console.log(
-          `[Poller] Saved ${trunkSnapshots.length} trunk snapshots`
-        );
+        emitLog(`[Poller] Saved ${trunkSnapshots.length} trunk snapshots`);
       }
     } catch (err) {
       console.error("[Poller] Trunk polling failed (non-fatal):", err);
@@ -129,7 +136,7 @@ export async function runPoll() {
     pruneOldSnapshots(7);
 
     lastPollTime = new Date();
-    console.log("[Poller] Poll cycle complete");
+    emitLog("[Poller] Poll cycle complete");
 
     if (onPollComplete) {
       onPollComplete();
@@ -143,9 +150,7 @@ export async function runPoll() {
 
 export function startPoller() {
   const cronExpr = `*/${config.polling.intervalMinutes} * * * *`;
-  console.log(
-    `[Poller] Scheduling polls every ${config.polling.intervalMinutes} minutes`
-  );
+  emitLog(`[Poller] Scheduling polls every ${config.polling.intervalMinutes} minutes`);
   cron.schedule(cronExpr, runPoll);
 
   // Run initial poll after a short delay to let the server start

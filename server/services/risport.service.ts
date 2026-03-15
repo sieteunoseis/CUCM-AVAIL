@@ -5,6 +5,17 @@ import { getDb } from "../db/database.js";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 let service: any;
+type LogCallback = (message: string) => void;
+let onRisLog: LogCallback | null = null;
+
+export function setOnRisLog(cb: LogCallback) {
+  onRisLog = cb;
+}
+
+function emitLog(message: string) {
+  console.log(message);
+  if (onRisLog) onRisLog(message);
+}
 
 function getService() {
   if (!service) {
@@ -47,7 +58,7 @@ export async function pollRegistrations(): Promise<RisDeviceResult[]> {
   const phoneNames = getPhoneNamesFromDb();
 
   if (phoneNames.length === 0) {
-    console.log("[RISPort] No phones in DB to query");
+    emitLog("[RISPort] No phones in DB to query");
     return [];
   }
 
@@ -59,12 +70,12 @@ export async function pollRegistrations(): Promise<RisDeviceResult[]> {
   // CUCM allows 15 RISPort requests/min — use 5s between batches to stay under limit
   const delayBetweenBatches = 5000;
 
-  console.log(`[RISPort] ${phoneNames.length} phones, ${totalBatches} batches, ${Math.round(delayBetweenBatches / 1000)}s between batches`);
+  emitLog(`[RISPort] ${phoneNames.length} phones, ${totalBatches} batches, ${Math.round(delayBetweenBatches / 1000)}s between batches`);
 
   for (let i = 0; i < phoneNames.length; i += batchSize) {
     const batch = phoneNames.slice(i, i + batchSize);
     const batchNum = Math.floor(i / batchSize) + 1;
-    console.log(`[RISPort] Batch ${batchNum}/${totalBatches} (${batch.length} devices)`);
+    emitLog(`[RISPort] Batch ${batchNum}/${totalBatches} (${batch.length} devices)`);
 
     // Wait between batches (not before the first one)
     if (i > 0 && delayBetweenBatches > 0) {
@@ -90,7 +101,7 @@ export async function pollRegistrations(): Promise<RisDeviceResult[]> {
       } catch (err: any) {
         const isRateLimit = err?.message?.includes("Exceeded allowed rate") || err?.status === 429;
         if (isRateLimit && attempt < 2) {
-          console.log(`[RISPort] Rate limited on batch ${batchNum}, waiting 30s before retry...`);
+          emitLog(`[RISPort] Rate limited on batch ${batchNum}, waiting 30s before retry...`);
           await sleep(30000);
         } else {
           throw err;
@@ -141,7 +152,7 @@ export async function pollTrunkRegistrations(): Promise<RisDeviceResult[]> {
     return [];
   }
 
-  console.log(`[RISPort] Polling ${trunkNames.length} SIP trunks`);
+  emitLog(`[RISPort] Polling ${trunkNames.length} SIP trunks`);
 
   // Trunks are usually few — single batch is fine
   const result = await svc.selectCmDevice(

@@ -4,8 +4,9 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import { config } from "./config.js";
 import { getDb, closeDb } from "./db/database.js";
-import { startPoller, setOnPollComplete, getLastPollTime, isPollInProgress } from "./services/poller.service.js";
+import { startPoller, setOnPollComplete, setOnPollerLog, getLastPollTime, isPollInProgress } from "./services/poller.service.js";
 import { runPoll } from "./services/poller.service.js";
+import { setOnRisLog } from "./services/risport.service.js";
 import serversRouter from "./routes/servers.routes.js";
 import cmgroupsRouter from "./routes/cmgroups.routes.js";
 import phonesRouter from "./routes/phones.routes.js";
@@ -70,6 +71,14 @@ if (clientDist) {
 // Socket.IO - notify clients when poll completes
 setOnPollComplete(() => {
   io.emit("registration:updated");
+});
+
+// Socket.IO - forward poller/risport logs to clients
+setOnPollerLog((message) => {
+  io.emit("poller:log", message);
+});
+setOnRisLog((message) => {
+  io.emit("poller:log", message);
 });
 
 io.on("connection", (socket) => {
