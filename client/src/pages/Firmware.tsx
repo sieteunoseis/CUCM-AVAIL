@@ -78,7 +78,7 @@ export default function Firmware() {
     for (const m of bd.modelDistribution) {
       aggModels.set(m.model, (aggModels.get(m.model) || 0) + m.count);
     }
-    for (const f of bd.failoverMovements) {
+    for (const f of bd.failoverMovements || []) {
       const key = `${f.currentServer}→${f.backupServer || "none"}`;
       const existing = aggFailover.get(key);
       if (existing) {
