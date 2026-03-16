@@ -294,7 +294,14 @@ export default function Report() {
                       <td className="px-4 py-2 text-noc-text truncate" title={r.active_load_id}>{r.active_load_id || "—"}</td>
                       <td className="px-4 py-2 text-noc-text truncate">{r.login_user_id || "—"}</td>
                       <td className="px-4 py-2 text-noc-text-dim truncate" title={r.last_seen_at}>
-                        {r.last_seen_at ? new Date(r.last_seen_at).toLocaleDateString() : "—"}
+                        {r.last_seen_at ? (() => {
+                          const raw = r.last_seen_at;
+                          const num = parseInt(raw, 10);
+                          const d = !isNaN(num) && num > 1000000000 && String(num) === raw
+                            ? new Date(num * 1000)
+                            : new Date(raw);
+                          return isNaN(d.getTime()) ? raw : d.toLocaleString();
+                        })() : "—"}
                       </td>
                       <td className="px-4 py-2">
                         {r.status ? (

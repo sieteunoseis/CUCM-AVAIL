@@ -79,20 +79,30 @@ router.get("/summary", (_req, res) => {
   const neverSeen = total - registered - unregistered;
 
   // Active in last 24h, 7d, 30d based on last_seen_at
+  // last_seen_at may be Unix epoch (string) or ISO date — handle both
+  const now = Math.floor(Date.now() / 1000);
+  const day = 86400;
+
   const active24h = (db.prepare(
     `SELECT COUNT(*) as c FROM latest_registrations
-     WHERE last_seen_at != '' AND last_seen_at > datetime('now', '-1 day')`
-  ).get() as any).c;
+     WHERE last_seen_at != '' AND (
+       CAST(last_seen_at AS INTEGER) > ? OR last_seen_at > datetime('now', '-1 day')
+     )`
+  ).get(now - day) as any).c;
 
   const active7d = (db.prepare(
     `SELECT COUNT(*) as c FROM latest_registrations
-     WHERE last_seen_at != '' AND last_seen_at > datetime('now', '-7 days')`
-  ).get() as any).c;
+     WHERE last_seen_at != '' AND (
+       CAST(last_seen_at AS INTEGER) > ? OR last_seen_at > datetime('now', '-7 days')
+     )`
+  ).get(now - 7 * day) as any).c;
 
   const active30d = (db.prepare(
     `SELECT COUNT(*) as c FROM latest_registrations
-     WHERE last_seen_at != '' AND last_seen_at > datetime('now', '-30 days')`
-  ).get() as any).c;
+     WHERE last_seen_at != '' AND (
+       CAST(last_seen_at AS INTEGER) > ? OR last_seen_at > datetime('now', '-30 days')
+     )`
+  ).get(now - 30 * day) as any).c;
 
   // Per-server breakdown
   const serverBreakdown = db.prepare(
