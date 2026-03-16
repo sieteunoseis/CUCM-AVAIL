@@ -388,6 +388,38 @@ export interface ServiceGroup {
   serviceCount: number;
 }
 
+export interface PhoneReport {
+  phone_name: string;
+  description: string;
+  model: string;
+  device_pool_name: string;
+  cm_group_name: string;
+  status: string;
+  ip_address: string;
+  status_reason: string;
+  dir_number: string;
+  protocol: string;
+  active_load_id: string;
+  last_seen_at: string;
+  login_user_id: string;
+  polled_at: string;
+  server_name: string;
+}
+
+export interface ReportSummary {
+  total: number;
+  registered: number;
+  unregistered: number;
+  neverSeen: number;
+  active24h: number;
+  active7d: number;
+  active30d: number;
+  serverBreakdown: { server_name: string; total: number; registered: number; unregistered: number }[];
+  protocols: { protocol: string; count: number }[];
+  firmware: { firmware: string; count: number }[];
+  models: { model: string; count: number }[];
+}
+
 export interface FeatureFlags {
   enableGateways: boolean;
   [key: string]: boolean;
@@ -487,6 +519,13 @@ export const api = {
   getServiceSummary: () => get<ServiceSummary[]>("/api/services/summary"),
   getTrackedServices: () => get<TrackedService[]>("/api/services/tracked"),
   getServiceGroups: () => get<ServiceGroup[]>("/api/services/groups"),
+
+  // Report
+  getReportSummary: () => get<ReportSummary>("/api/report/summary"),
+  getPhoneReport: (params?: Record<string, string>) => {
+    const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+    return get<PhoneReport[]>(`/api/report/phones${qs}`);
+  },
 
   // Feature Flags
   getFeatures: () => get<FeatureFlags>("/api/features"),
