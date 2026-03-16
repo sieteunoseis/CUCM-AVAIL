@@ -73,6 +73,15 @@ app.get("/api/poll/status", (_req, res) => {
   });
 });
 
+app.post("/api/poll/trigger", (_req, res) => {
+  if (isPollInProgress()) {
+    res.json({ ok: false, message: "Poll already in progress" });
+    return;
+  }
+  runPoll();
+  res.json({ ok: true, message: "Poll triggered" });
+});
+
 // Serve static frontend in production
 const clientDistCandidates = [
   join(__dirname, "../client/dist"),   // Docker: /app/server/../client/dist
