@@ -55,7 +55,10 @@ if (config.features.enableGateways) {
 
 // Expose feature flags to client
 app.get("/api/features", (_req, res) => {
-  res.json({ enableGateways: config.features.enableGateways });
+  res.json({
+    enableGateways: config.features.enableGateways,
+    demoMode: config.features.demoMode,
+  });
 });
 
 app.get("/api/poll/status", (_req, res) => {
