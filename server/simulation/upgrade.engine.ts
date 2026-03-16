@@ -157,9 +157,25 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
     (s: any) => s.node_type !== "Publisher" && s.ccm_service_active !== 1
   );
 
+  // Build service availability map: service_name → set of active server IDs
+  const serviceServerMap = new Map<string, Set<number>>();
+  const svcStatuses = db
+    .prepare(
+      `SELECT ss.service_name, ss.server_id, ss.status
+       FROM service_statuses ss`
+    )
+    .all() as { service_name: string; server_id: number; status: string }[];
+  for (const s of svcStatuses) {
+    if (s.status === "Started" || s.status === "started") {
+      if (!serviceServerMap.has(s.service_name)) serviceServerMap.set(s.service_name, new Set());
+      serviceServerMap.get(s.service_name)!.add(s.server_id);
+    }
+  }
+
   // Sort CCM subscribers using scoring:
-  // - Prefer non-primary CMG members (priority > 1) before primary (priority 1)
-  // - Within that, prefer least phone impact
+  // 1. Backup CMG members before primary (highest weight)
+  // 2. Avoid being the last active instance of any service (SG penalty)
+  // 3. Least phone re-registration impact (tiebreaker)
   const remaining = [...ccmSubscribers];
 
   while (remaining.length > 0) {
@@ -171,10 +187,25 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
       const phoneImpact = estimateImpact(srv, upgraded, cmGroups, cmgMembers, phoneServerMap, ccmServerIds);
       const priority = serverBestPriority.get(srv.id) ?? Infinity;
 
-      // Score: primary CMG members (priority 1) get a large penalty to push them later
-      // This ensures backup members are upgraded first within each CMG
+      // Score components:
+      // 1. Primary CMG members get 100K penalty (backup first)
       const primaryPenalty = priority === 1 ? 100000 : 0;
-      const score = primaryPenalty + phoneImpact;
+
+      // 2. Last-active-service penalty: if upgrading this server would cause
+      //    any service to have 0 active instances, add 50K penalty per service
+      let lastServicePenalty = 0;
+      for (const [, activeServers] of serviceServerMap) {
+        // Count how many active servers remain (excluding already upgraded + this candidate)
+        let remainingActive = 0;
+        for (const sid of activeServers) {
+          if (!upgraded.has(sid) && sid !== srv.id) remainingActive++;
+        }
+        if (remainingActive === 0 && activeServers.has(srv.id) && !upgraded.has(srv.id)) {
+          lastServicePenalty += 50000;
+        }
+      }
+
+      const score = primaryPenalty + lastServicePenalty + phoneImpact;
 
       if (score < bestScore) {
         bestScore = score;
@@ -200,6 +231,18 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
       step.notes.push(`Backup CMG member (priority ${pri}) — safe to upgrade while primary stays online`);
     } else if (pri === 1) {
       step.notes.push("Primary CMG member — backup members should already be upgraded and online");
+    }
+
+    // Check if this server is the last active for any service
+    for (const [svcName, activeServers] of serviceServerMap) {
+      if (!activeServers.has(server.id)) continue;
+      let remainingActive = 0;
+      for (const sid of activeServers) {
+        if (!upgraded.has(sid) && sid !== server.id) remainingActive++;
+      }
+      if (remainingActive === 0) {
+        step.notes.push(`Last active server for ${svcName} — service outage during upgrade`);
+      }
     }
 
     steps.push(step);
