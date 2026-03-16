@@ -175,6 +175,7 @@ export function insertRegistrationBatch(
     protocol?: string;
     activeLoadId?: string;
     lastSeenAt?: string;
+    lastActiveAt?: string;
     loginUserId?: string;
   }[]
 ) {
@@ -185,9 +186,9 @@ export function insertRegistrationBatch(
   );
   const upsertLatest = db.prepare(
     `INSERT INTO latest_registrations (phone_id, registered_server_id, status, ip_address,
-       status_reason, dir_number, protocol, active_load_id, last_seen_at, login_user_id, polled_at)
+       status_reason, dir_number, protocol, active_load_id, last_seen_at, last_active_at, login_user_id, polled_at)
      VALUES (@phoneId, @registeredServerId, @status, @ipAddress,
-       @statusReason, @dirNumber, @protocol, @activeLoadId, @lastSeenAt, @loginUserId, datetime('now'))
+       @statusReason, @dirNumber, @protocol, @activeLoadId, @lastSeenAt, @lastActiveAt, @loginUserId, datetime('now'))
      ON CONFLICT(phone_id) DO UPDATE SET
        registered_server_id = @registeredServerId,
        status = @status,
@@ -197,6 +198,7 @@ export function insertRegistrationBatch(
        protocol = @protocol,
        active_load_id = @activeLoadId,
        last_seen_at = @lastSeenAt,
+       last_active_at = @lastActiveAt,
        login_user_id = @loginUserId,
        polled_at = datetime('now')`
   );
@@ -209,6 +211,7 @@ export function insertRegistrationBatch(
         protocol: s.protocol || "",
         activeLoadId: s.activeLoadId || "",
         lastSeenAt: s.lastSeenAt || "",
+        lastActiveAt: s.lastActiveAt || "",
         loginUserId: s.loginUserId || "",
       });
       upsertLatest.run({
@@ -218,6 +221,7 @@ export function insertRegistrationBatch(
         protocol: s.protocol || "",
         activeLoadId: s.activeLoadId || "",
         lastSeenAt: s.lastSeenAt || "",
+        lastActiveAt: s.lastActiveAt || "",
         loginUserId: s.loginUserId || "",
       });
     }
@@ -230,7 +234,7 @@ export function getLatestRegistrations() {
     .prepare(
       `SELECT lr.phone_id, lr.registered_server_id, lr.status, lr.ip_address, lr.polled_at,
               lr.status_reason, lr.dir_number, lr.protocol, lr.active_load_id,
-              lr.last_seen_at, lr.login_user_id,
+              lr.last_seen_at, lr.last_active_at, lr.login_user_id,
               p.name as phone_name, p.model, p.description as phone_description,
               s.name as server_name, s.hostname as server_hostname,
               dp.name as device_pool_name, cmg.name as cm_group_name

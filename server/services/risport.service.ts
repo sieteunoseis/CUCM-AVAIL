@@ -39,6 +39,7 @@ export interface RisDeviceResult {
     protocol: string;
     activeLoadId: string;
     timeStamp: string;
+    lastActive: string;
     loginUserId: string;
   }[];
 }
@@ -141,7 +142,13 @@ export async function pollRegistrations(): Promise<RisDeviceResult[]> {
         timeStamp: (() => {
           const ts = d.TimeStamp || d.timeStamp || "";
           if (!ts) return "";
-          // Convert Unix epoch to ISO string
+          const num = parseInt(ts, 10);
+          if (!isNaN(num) && num > 1000000000) return new Date(num * 1000).toISOString();
+          return ts;
+        })(),
+        lastActive: (() => {
+          const ts = d.LastActive || d.lastActive || "";
+          if (!ts) return "";
           const num = parseInt(ts, 10);
           if (!isNaN(num) && num > 1000000000) return new Date(num * 1000).toISOString();
           return ts;

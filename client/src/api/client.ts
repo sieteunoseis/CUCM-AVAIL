@@ -401,6 +401,7 @@ export interface PhoneReport {
   protocol: string;
   active_load_id: string;
   last_seen_at: string;
+  last_active_at: string;
   login_user_id: string;
   polled_at: string;
   server_name: string;

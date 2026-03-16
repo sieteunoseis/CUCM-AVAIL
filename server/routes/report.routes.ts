@@ -47,7 +47,7 @@ router.get("/phones", (req, res) => {
       `SELECT p.name as phone_name, p.description, p.model,
               dp.name as device_pool_name, cmg.name as cm_group_name,
               lr.status, lr.ip_address, lr.status_reason, lr.dir_number,
-              lr.protocol, lr.active_load_id, lr.last_seen_at, lr.login_user_id,
+              lr.protocol, lr.active_load_id, lr.last_seen_at, lr.last_active_at, lr.login_user_id,
               lr.polled_at, s.name as server_name
        FROM phones p
        LEFT JOIN device_pools dp ON p.device_pool_id = dp.id

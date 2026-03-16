@@ -37,6 +37,7 @@ function migrateSchema() {
     { table: "latest_registrations", column: "protocol", type: "TEXT DEFAULT ''" },
     { table: "latest_registrations", column: "active_load_id", type: "TEXT DEFAULT ''" },
     { table: "latest_registrations", column: "last_seen_at", type: "TEXT DEFAULT ''" },
+    { table: "latest_registrations", column: "last_active_at", type: "TEXT DEFAULT ''" },
     { table: "latest_registrations", column: "login_user_id", type: "TEXT DEFAULT ''" },
   ];
 

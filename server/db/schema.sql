@@ -85,6 +85,7 @@ CREATE TABLE IF NOT EXISTS latest_registrations (
   protocol TEXT DEFAULT '',
   active_load_id TEXT DEFAULT '',
   last_seen_at TEXT DEFAULT '',
+  last_active_at TEXT DEFAULT '',
   login_user_id TEXT DEFAULT '',
   polled_at TEXT DEFAULT (datetime('now'))
 );

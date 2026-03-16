@@ -16,7 +16,7 @@ export default function Report() {
   const [filterServer, setFilterServer] = useState("");
   const [filterFirmware, setFilterFirmware] = useState("");
   const [showPhones, setShowPhones] = useState(false);
-  const { sort, toggle, sorted } = useSort<"name" | "model" | "dn" | "proto" | "server" | "pool" | "ip" | "firmware" | "status" | "user" | "seen">();
+  const { sort, toggle, sorted } = useSort<"name" | "model" | "dn" | "proto" | "server" | "pool" | "ip" | "firmware" | "status" | "user" | "seen" | "active">();
   const { cmgToAg } = useAvailabilityGroups();
 
   useEffect(() => {
@@ -249,8 +249,9 @@ export default function Report() {
                   <ColHeader label="IP" sortKey="ip" sort={sort} onSort={toggle} className="w-[8%]" />
                   <ColHeader label="Firmware" sortKey="firmware" sort={sort} onSort={toggle} className="w-[10%]" />
                   <ColHeader label="EM User" sortKey="user" sort={sort} onSort={toggle} className="w-[8%]" />
-                  <ColHeader label="Last Seen" sortKey="seen" sort={sort} onSort={toggle} className="w-[10%]" />
-                  <ColHeader label="Status" sortKey="status" sort={sort} onSort={toggle} className="w-[8%]" />
+                  <ColHeader label="Last Seen" sortKey="seen" sort={sort} onSort={toggle} className="w-[9%]" />
+                  <ColHeader label="Last Active" sortKey="active" sort={sort} onSort={toggle} className="w-[9%]" />
+                  <ColHeader label="Status" sortKey="status" sort={sort} onSort={toggle} className="w-[6%]" />
                 </tr>
               </thead>
               <tbody>
@@ -273,6 +274,7 @@ export default function Report() {
                       case "firmware": return r.active_load_id || "";
                       case "user": return r.login_user_id || "";
                       case "seen": return r.last_seen_at || "";
+                      case "active": return r.last_active_at || "";
                       case "status": return r.status || "";
                     }
                   }).slice(0, 500).map((r, i) => (
@@ -296,6 +298,16 @@ export default function Report() {
                       <td className="px-4 py-2 text-noc-text-dim truncate" title={r.last_seen_at}>
                         {r.last_seen_at ? (() => {
                           const raw = r.last_seen_at;
+                          const num = parseInt(raw, 10);
+                          const d = !isNaN(num) && num > 1000000000 && String(num) === raw
+                            ? new Date(num * 1000)
+                            : new Date(raw);
+                          return isNaN(d.getTime()) ? raw : d.toLocaleString();
+                        })() : "—"}
+                      </td>
+                      <td className="px-4 py-2 text-noc-text-dim truncate" title={r.last_active_at}>
+                        {r.last_active_at ? (() => {
+                          const raw = r.last_active_at;
                           const num = parseInt(raw, 10);
                           const d = !isNaN(num) && num > 1000000000 && String(num) === raw
                             ? new Date(num * 1000)

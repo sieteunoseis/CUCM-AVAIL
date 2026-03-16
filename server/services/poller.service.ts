@@ -93,6 +93,7 @@ export async function runPoll() {
       protocol: string;
       activeLoadId: string;
       lastSeenAt: string;
+      lastActiveAt: string;
       loginUserId: string;
     }[] = [];
 
@@ -111,6 +112,7 @@ export async function runPoll() {
             protocol: device.protocol,
             activeLoadId: device.activeLoadId,
             lastSeenAt: device.timeStamp,
+            lastActiveAt: device.lastActive,
             loginUserId: device.loginUserId,
           });
         }
