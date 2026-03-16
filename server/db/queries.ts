@@ -435,6 +435,134 @@ export function getTrunkRegistrationStats() {
     .all();
 }
 
+// --- Gateways ---
+
+export function upsertGateway(gw: {
+  name: string;
+  description: string;
+  domainName: string;
+  devicePoolId: number;
+}) {
+  const db = getDb();
+  return db
+    .prepare(
+      `INSERT INTO gateways (name, description, domain_name, device_pool_id)
+       VALUES (@name, @description, @domainName, @devicePoolId)
+       ON CONFLICT(name) DO UPDATE SET
+         description = @description,
+         domain_name = @domainName,
+         device_pool_id = @devicePoolId`
+    )
+    .run(gw);
+}
+
+export function getAllGateways() {
+  return getDb()
+    .prepare(
+      `SELECT g.*, dp.name as device_pool_name, cmg.name as cm_group_name
+       FROM gateways g
+       LEFT JOIN device_pools dp ON g.device_pool_id = dp.id
+       LEFT JOIN cm_groups cmg ON dp.cm_group_id = cmg.id
+       ORDER BY g.name`
+    )
+    .all();
+}
+
+export function getGatewayByName(name: string) {
+  return getDb().prepare("SELECT * FROM gateways WHERE name = ?").get(name);
+}
+
+export function getGatewayCount() {
+  const row = getDb()
+    .prepare("SELECT COUNT(*) as count FROM gateways")
+    .get() as { count: number };
+  return row.count;
+}
+
+export function insertGatewaySnapshotBatch(
+  snapshots: {
+    gatewayId: number;
+    registeredServerId: number | null;
+    status: string;
+    ipAddress: string;
+  }[]
+) {
+  const db = getDb();
+  const insert = db.prepare(
+    `INSERT INTO gateway_snapshots (gateway_id, registered_server_id, status, ip_address)
+     VALUES (@gatewayId, @registeredServerId, @status, @ipAddress)`
+  );
+  const upsertLatest = db.prepare(
+    `INSERT INTO latest_gateway_registrations (gateway_id, registered_server_id, status, ip_address, polled_at)
+     VALUES (@gatewayId, @registeredServerId, @status, @ipAddress, datetime('now'))
+     ON CONFLICT(gateway_id, registered_server_id) DO UPDATE SET
+       status = @status,
+       ip_address = @ipAddress,
+       polled_at = datetime('now')`
+  );
+  const tx = db.transaction(() => {
+    // Clear stale latest registrations before inserting fresh ones
+    const gatewayIds = [...new Set(snapshots.map((s) => s.gatewayId))];
+    const clearLatest = db.prepare(
+      "DELETE FROM latest_gateway_registrations WHERE gateway_id = ?"
+    );
+    for (const id of gatewayIds) {
+      clearLatest.run(id);
+    }
+    for (const s of snapshots) {
+      insert.run(s);
+      upsertLatest.run(s);
+    }
+  });
+  tx();
+}
+
+export function getLatestGatewayRegistrations() {
+  return getDb()
+    .prepare(
+      `SELECT lgr.gateway_id, lgr.registered_server_id, lgr.status, lgr.ip_address, lgr.polled_at,
+              g.name as gateway_name, g.description, g.domain_name,
+              s.name as server_name,
+              dp.name as device_pool_name, cmg.name as cm_group_name
+       FROM latest_gateway_registrations lgr
+       JOIN gateways g ON lgr.gateway_id = g.id
+       LEFT JOIN servers s ON lgr.registered_server_id = s.id
+       LEFT JOIN device_pools dp ON g.device_pool_id = dp.id
+       LEFT JOIN cm_groups cmg ON dp.cm_group_id = cmg.id`
+    )
+    .all();
+}
+
+export function getGatewayRegistrationStats() {
+  return getDb()
+    .prepare(
+      `SELECT s.name as server_name, lgr.status, COUNT(*) as count
+       FROM latest_gateway_registrations lgr
+       LEFT JOIN servers s ON lgr.registered_server_id = s.id
+       GROUP BY s.name, lgr.status`
+    )
+    .all();
+}
+
+export function getGatewaySummary() {
+  // For each gateway, show how many subscribers it's registered to
+  return getDb()
+    .prepare(
+      `SELECT g.id, g.name as gateway_name, g.description, g.domain_name,
+              dp.name as device_pool_name, cmg.name as cm_group_name,
+              COUNT(lgr.registered_server_id) as registered_count,
+              GROUP_CONCAT(s.name, ', ') as registered_servers
+       FROM gateways g
+       LEFT JOIN device_pools dp ON g.device_pool_id = dp.id
+       LEFT JOIN cm_groups cmg ON dp.cm_group_id = cmg.id
+       LEFT JOIN latest_gateway_registrations lgr ON lgr.gateway_id = g.id AND lgr.status = 'Registered'
+       LEFT JOIN servers s ON lgr.registered_server_id = s.id
+       GROUP BY g.id
+       ORDER BY g.name`
+    )
+    .all();
+}
+
 // --- Subnets ---
 
 export function getAllSubnets() {

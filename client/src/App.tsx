@@ -10,13 +10,14 @@ import Firmware from "./pages/Firmware";
 import AvailabilityGroups from "./pages/AvailabilityGroups";
 import Planner from "./pages/Planner";
 import Trunks from "./pages/Trunks";
+import Gateways from "./pages/Gateways";
 import Help from "./pages/Help";
 
 const SOCKET_URL = import.meta.env.DEV ? "http://localhost:3000" : "";
 
-type Page = "dashboard" | "ag" | "simulation" | "subnets" | "upgrade" | "firmware" | "planner" | "trunks" | "help";
+type Page = "dashboard" | "ag" | "simulation" | "subnets" | "upgrade" | "firmware" | "planner" | "trunks" | "gateways" | "help";
 
-const PAGES: { key: Page; label: string }[] = [
+const BASE_PAGES: { key: Page; label: string; feature?: string }[] = [
   { key: "dashboard", label: "dashboard" },
   { key: "ag", label: "avail groups" },
   { key: "simulation", label: "simulation" },
@@ -24,6 +25,7 @@ const PAGES: { key: Page; label: string }[] = [
   { key: "firmware", label: "firmware" },
   { key: "planner", label: "planner" },
   { key: "trunks", label: "trunks" },
+  { key: "gateways", label: "gateways", feature: "enableGateways" },
   { key: "upgrade", label: "upgrade" },
   { key: "help", label: "help" },
 ];
@@ -54,9 +56,11 @@ function App() {
   const [logHistory, setLogHistory] = useState<string[]>([]);
   const [pollStatus, setPollStatus] = useState<PollStatus | null>(null);
   const [scrapeProgress, setScrapeProgress] = useState<{ total: number; completed: number; found: number; errors: number; status: string } | null>(null);
+  const [features, setFeatures] = useState<Record<string, boolean>>({});
   const { theme, toggle: toggleTheme } = useTheme();
 
   useEffect(() => {
+    api.getFeatures().then(setFeatures).catch(() => {});
     api.getPollStatus().then(setPollStatus).catch(() => {});
     const socket = io(SOCKET_URL);
     socket.on("registration:updated", () => {
@@ -80,6 +84,8 @@ function App() {
     const t = setInterval(() => setClock(new Date()), 1000);
     return () => clearInterval(t);
   }, []);
+
+  const PAGES = BASE_PAGES.filter((p) => !p.feature || features[p.feature]);
 
   return (
     <div className="min-h-screen bg-noc-bg flex flex-col">
@@ -147,6 +153,8 @@ function App() {
           <Planner />
         ) : page === "trunks" ? (
           <Trunks />
+        ) : page === "gateways" ? (
+          <Gateways />
         ) : page === "help" ? (
           <Help />
         ) : (

@@ -144,6 +144,88 @@ export async function pollRegistrations(): Promise<RisDeviceResult[]> {
   return allResults;
 }
 
+function getGatewayNamesFromDb(): string[] {
+  const db = getDb();
+  const rows = db
+    .prepare("SELECT name FROM gateways")
+    .all() as { name: string }[];
+  return rows.map((r) => r.name);
+}
+
+export async function pollGatewayRegistrations(): Promise<RisDeviceResult[]> {
+  const svc = getService();
+  const gatewayNames = getGatewayNamesFromDb();
+
+  if (gatewayNames.length === 0) {
+    return [];
+  }
+
+  emitLog(`[RISPort] Polling ${gatewayNames.length} MGCP gateways`);
+
+  const allResults: RisDeviceResult[] = [];
+  const batchSize = 1000;
+  const totalBatches = Math.ceil(gatewayNames.length / batchSize);
+
+  for (let i = 0; i < gatewayNames.length; i += batchSize) {
+    const batch = gatewayNames.slice(i, i + batchSize);
+    const batchNum = Math.floor(i / batchSize) + 1;
+
+    if (totalBatches > 1) {
+      emitLog(`[RISPort] Gateway batch ${batchNum}/${totalBatches} (${batch.length} devices)`);
+    }
+
+    if (i > 0) {
+      await sleep(5000);
+    }
+
+    const result = await svc.selectCmDevice(
+      "SelectCmDeviceExt",
+      batch.length,
+      "Gateway",
+      255,
+      "Any",
+      "",
+      "Name",
+      batch,
+      "Any",
+      "Any"
+    );
+
+    const nodes = Array.isArray(result.results)
+      ? result.results
+      : result.results
+        ? [result.results]
+        : [];
+
+    for (const node of nodes) {
+      const devices = node.CmDevices?.item
+        ? Array.isArray(node.CmDevices.item)
+          ? node.CmDevices.item
+          : [node.CmDevices.item]
+        : [];
+
+      const parsed = devices.map((d: any) => ({
+        name: d.Name || d.name || "",
+        ipAddress:
+          d.IPAddress?.item?.IP || d.IPAddress?.IP || d.IpAddress || "",
+        status: d.Status || d.status || "Unknown",
+      }));
+
+      const existing = allResults.find((r) => r.nodeName === (node.Name || node.name || ""));
+      if (existing) {
+        existing.devices.push(...parsed);
+      } else {
+        allResults.push({
+          nodeName: node.Name || node.name || "",
+          devices: parsed,
+        });
+      }
+    }
+  }
+
+  return allResults;
+}
+
 export async function pollTrunkRegistrations(): Promise<RisDeviceResult[]> {
   const svc = getService();
   const trunkNames = getTrunkNamesFromDb();

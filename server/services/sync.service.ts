@@ -4,6 +4,7 @@ import {
   getAllDevicePools as axlGetDevicePools,
   getAllPhonesSql,
   getAllSipTrunksSql,
+  getAllGatewaysSql,
 } from "./axl.service.js";
 import {
   upsertServer,
@@ -12,8 +13,10 @@ import {
   upsertDevicePool,
   upsertPhone,
   upsertTrunk,
+  upsertGateway,
   getServerByName,
 } from "../db/queries.js";
+import { config } from "../config.js";
 
 export async function syncAll() {
   console.log("[Sync] Starting full AXL sync...");
@@ -100,11 +103,35 @@ export async function syncAll() {
     console.error("[Sync] SIP trunk sync failed (non-fatal):", e);
   }
 
+  // 6. Sync MGCP Gateways (if enabled)
+  let gatewayCount = 0;
+  if (config.features.enableGateways) {
+    try {
+      const gateways = await getAllGatewaysSql();
+      for (const gw of gateways) {
+        const devicePoolId = dpMap.get(gw.devicePoolName);
+        if (devicePoolId) {
+          upsertGateway({
+            name: gw.name,
+            description: gw.description,
+            domainName: gw.domainName,
+            devicePoolId,
+          });
+          gatewayCount++;
+        }
+      }
+      console.log(`[Sync] Synced ${gatewayCount} MGCP gateways`);
+    } catch (e) {
+      console.error("[Sync] Gateway sync failed (non-fatal):", e);
+    }
+  }
+
   return {
     servers: servers.length,
     cmGroups: cmGroups.length,
     devicePools: devicePools.length,
     phones: phoneCount,
     trunks: trunkCount,
+    gateways: gatewayCount,
   };
 }

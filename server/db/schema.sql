@@ -91,6 +91,35 @@ CREATE TABLE IF NOT EXISTS latest_trunk_registrations (
   polled_at TEXT DEFAULT (datetime('now'))
 );
 
+CREATE TABLE IF NOT EXISTS gateways (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  name TEXT NOT NULL UNIQUE,
+  description TEXT DEFAULT '',
+  domain_name TEXT DEFAULT '',
+  device_pool_id INTEGER REFERENCES device_pools(id),
+  created_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS gateway_snapshots (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  gateway_id INTEGER NOT NULL REFERENCES gateways(id),
+  registered_server_id INTEGER REFERENCES servers(id),
+  status TEXT NOT NULL,
+  ip_address TEXT DEFAULT '',
+  polled_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS latest_gateway_registrations (
+  gateway_id INTEGER NOT NULL REFERENCES gateways(id),
+  registered_server_id INTEGER REFERENCES servers(id),
+  status TEXT NOT NULL,
+  ip_address TEXT DEFAULT '',
+  polled_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY (gateway_id, registered_server_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_gw_snap_latest ON gateway_snapshots(gateway_id, polled_at DESC);
+
 CREATE INDEX IF NOT EXISTS idx_reg_latest ON registration_snapshots(phone_id, polled_at DESC);
 CREATE INDEX IF NOT EXISTS idx_phones_pool ON phones(device_pool_id);
 CREATE INDEX IF NOT EXISTS idx_cmg_members ON cm_group_members(cm_group_id, priority);

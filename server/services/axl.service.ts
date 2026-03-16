@@ -141,6 +141,41 @@ export async function getAllSipTrunksSql(): Promise<
   }));
 }
 
+export async function getAllGatewaysSql(): Promise<
+  {
+    name: string;
+    description: string;
+    domainName: string;
+    devicePoolName: string;
+  }[]
+> {
+  const svc = getService();
+  const result = await svc.executeOperation("executeSQLQuery", {
+    sql: `SELECT d.name, d.description, mgcp.domainname,
+                 dp.name as devicepool
+          FROM device d
+          JOIN devicepool dp ON d.fkdevicepool = dp.pkid
+          LEFT JOIN mgcpdevicemember mdm ON mdm.fkdevice = d.pkid
+          LEFT JOIN mgcp ON mdm.fkmgcp = mgcp.pkid
+          WHERE d.tkclass = 2`,
+  });
+
+  if (!result) return [];
+
+  const rows = Array.isArray(result.row)
+    ? result.row
+    : result.row
+      ? [result.row]
+      : [];
+
+  return rows.map((r: any) => ({
+    name: r.name || "",
+    description: r.description || "",
+    domainName: r.domainname || "",
+    devicePoolName: r.devicepool || "",
+  }));
+}
+
 export async function getAllPhonesSql(): Promise<
   {
     name: string;

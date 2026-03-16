@@ -17,4 +17,7 @@ export const config = {
   polling: {
     intervalMinutes: parseInt(process.env.POLL_INTERVAL || "15", 10),
   },
+  features: {
+    enableGateways: (process.env.ENABLE_GATEWAYS || "false").toLowerCase() === "true",
+  },
 };

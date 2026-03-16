@@ -308,6 +308,47 @@ export interface TrunkImpact {
   movements: TrunkMovement[];
 }
 
+export interface Gateway {
+  id: number;
+  name: string;
+  description: string;
+  domain_name: string;
+  device_pool_name: string;
+  cm_group_name: string;
+}
+
+export interface GatewaysResponse {
+  gateways: Gateway[];
+  total: number;
+}
+
+export interface GatewayRegistration {
+  gateway_name: string;
+  description: string;
+  domain_name: string;
+  server_name: string;
+  device_pool_name: string;
+  cm_group_name: string;
+  status: string;
+  ip_address: string;
+}
+
+export interface GatewaySummary {
+  id: number;
+  gateway_name: string;
+  description: string;
+  domain_name: string;
+  device_pool_name: string;
+  cm_group_name: string;
+  registered_count: number;
+  registered_servers: string | null;
+}
+
+export interface FeatureFlags {
+  enableGateways: boolean;
+  [key: string]: boolean;
+}
+
 export interface SimulationResult {
   totalPhones: number;
   noImpact: number;
@@ -375,4 +416,14 @@ export const api = {
 
   // Availability Groups
   getAvailabilityGroups: () => get<AvailabilityGroup[]>("/api/ag"),
+
+  // Feature Flags
+  getFeatures: () => get<FeatureFlags>("/api/features"),
+
+  // Gateways
+  getGateways: () => get<GatewaysResponse>("/api/gateways"),
+  getGatewayRegistrations: () => get<GatewayRegistration[]>("/api/gateways/registrations"),
+  getGatewayStats: () =>
+    get<{ server_name: string; status: string; count: number }[]>("/api/gateways/stats"),
+  getGatewaySummary: () => get<GatewaySummary[]>("/api/gateways/summary"),
 };

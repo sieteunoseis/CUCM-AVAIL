@@ -1,6 +1,6 @@
 import cron from "node-cron";
 import { config } from "../config.js";
-import { pollRegistrations, pollTrunkRegistrations } from "./risport.service.js";
+import { pollRegistrations, pollTrunkRegistrations, pollGatewayRegistrations } from "./risport.service.js";
 import { checkAllServersServiceStatus } from "./serviceability.service.js";
 import {
   getAllServers,
@@ -8,7 +8,9 @@ import {
   getServerByName,
   insertRegistrationBatch,
   insertTrunkSnapshotBatch,
+  insertGatewaySnapshotBatch,
   getTrunkByName,
+  getGatewayByName,
   updateServerServiceStatus,
   pruneOldSnapshots,
 } from "../db/queries.js";
@@ -133,7 +135,42 @@ export async function runPoll() {
       console.error("[Poller] Trunk polling failed (non-fatal):", err);
     }
 
-    // 4. Prune old data
+    // 4. Poll RISPort for MGCP gateway registrations (if enabled)
+    if (config.features.enableGateways) {
+      try {
+        const gwResults = await pollGatewayRegistrations();
+        const gwSnapshots: {
+          gatewayId: number;
+          registeredServerId: number | null;
+          status: string;
+          ipAddress: string;
+        }[] = [];
+
+        for (const node of gwResults) {
+          const server = getServerByName(node.nodeName) as any;
+          for (const device of node.devices) {
+            const gw = getGatewayByName(device.name) as any;
+            if (gw) {
+              gwSnapshots.push({
+                gatewayId: gw.id,
+                registeredServerId: server?.id || null,
+                status: device.status,
+                ipAddress: device.ipAddress,
+              });
+            }
+          }
+        }
+
+        if (gwSnapshots.length > 0) {
+          insertGatewaySnapshotBatch(gwSnapshots);
+          emitLog(`[Poller] Saved ${gwSnapshots.length} gateway snapshots`);
+        }
+      } catch (err) {
+        console.error("[Poller] Gateway polling failed (non-fatal):", err);
+      }
+    }
+
+    // 5. Prune old data
     pruneOldSnapshots(7);
 
     lastPollTime = new Date();
