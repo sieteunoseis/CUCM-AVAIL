@@ -3,11 +3,25 @@ import { api } from "../api/client";
 import type { ServiceStatusEntry, ServiceSummary, ServiceGroup } from "../api/client";
 import { SgBadge } from "../components/SgBadge";
 
+type SortKey = "name" | "active" | "sg";
+type SortDir = "asc" | "desc";
+
 export default function Services() {
   const [statuses, setStatuses] = useState<ServiceStatusEntry[]>([]);
   const [summary, setSummary] = useState<ServiceSummary[]>([]);
   const [serviceGroups, setServiceGroups] = useState<ServiceGroup[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sortKey, setSortKey] = useState<SortKey>("name");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
+
+  const toggleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir(sortDir === "asc" ? "desc" : "asc");
+    } else {
+      setSortKey(key);
+      setSortDir(key === "active" ? "desc" : "asc");
+    }
+  };
 
   useEffect(() => {
     Promise.all([
@@ -44,7 +58,7 @@ export default function Services() {
   }
 
   // Get unique service names and server names
-  const serviceNames = [...new Set(statuses.map((s) => s.service_name))].sort();
+  const serviceNamesRaw = [...new Set(statuses.map((s) => s.service_name))];
   const serverNames = [...new Set(statuses.map((s) => s.server_name))].sort();
 
   // Build lookup: service_name → server_name → status
@@ -53,6 +67,23 @@ export default function Services() {
     if (!statusLookup.has(s.service_name)) statusLookup.set(s.service_name, new Map());
     statusLookup.get(s.service_name)!.set(s.server_name, s);
   }
+
+  // Sort services
+  const serviceNames = [...serviceNamesRaw].sort((a, b) => {
+    const dir = sortDir === "asc" ? 1 : -1;
+    if (sortKey === "name") return a.localeCompare(b) * dir;
+    if (sortKey === "active") {
+      const aActive = summary.find((s) => s.service_name === a)?.active_count || 0;
+      const bActive = summary.find((s) => s.service_name === b)?.active_count || 0;
+      return (aActive - bActive) * dir;
+    }
+    if (sortKey === "sg") {
+      const aSg = serviceToSg.get(a) || "ZZ";
+      const bSg = serviceToSg.get(b) || "ZZ";
+      return aSg.localeCompare(bSg) * dir;
+    }
+    return 0;
+  });
 
   const totalServices = summary.length;
   const operational = summary.filter((s) => s.active_count > 0).length;
@@ -92,15 +123,33 @@ export default function Services() {
       {/* Service × Server Matrix */}
       {statuses.length > 0 ? (
         <div className="border border-noc-border bg-noc-surface overflow-hidden pane-resize">
-          <div className="tmux-title text-noc-cyan">
-            Service Status Matrix
+          <div className="tmux-title text-noc-cyan flex items-center justify-between">
+            <span>Service Status Matrix</span>
+            <div className="flex items-center gap-2 text-[10px] font-mono normal-case tracking-normal">
+              <span className="text-noc-text-dim">Sort:</span>
+              {(["name", "active", "sg"] as SortKey[]).map((key) => (
+                <button
+                  key={key}
+                  onClick={() => toggleSort(key)}
+                  className={`px-1.5 py-0.5 cursor-pointer transition-colors ${
+                    sortKey === key ? "text-noc-cyan bg-noc-cyan/10" : "text-noc-text-dim hover:text-noc-text"
+                  }`}
+                >
+                  {key === "name" ? "Name" : key === "active" ? "Active" : "SG"}
+                  {sortKey === key ? (sortDir === "asc" ? " ▲" : " ▼") : ""}
+                </button>
+              ))}
+            </div>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs font-mono">
               <thead>
                 <tr className="border-b border-noc-border bg-noc-panel/50 text-noc-text-dim">
-                  <th className="text-left px-4 py-2.5 font-medium text-[10px] uppercase tracking-widest sticky left-0 bg-noc-panel/50 z-10">
-                    Service
+                  <th
+                    className="text-left px-4 py-2.5 font-medium text-[10px] uppercase tracking-widest sticky left-0 bg-noc-panel/50 z-10 cursor-pointer hover:text-noc-text transition-colors select-none"
+                    onClick={() => toggleSort("name")}
+                  >
+                    Service {sortKey === "name" ? (sortDir === "asc" ? "▲" : "▼") : ""}
                   </th>
                   {serverNames.map((server) => (
                     <th key={server} className="text-center px-3 py-2.5 font-medium text-[10px] uppercase tracking-widest whitespace-nowrap">
