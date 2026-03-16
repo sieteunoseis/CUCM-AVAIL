@@ -57,6 +57,7 @@ export interface SimulationResult {
   unregistered: number;
   details: SimulationDetail[];
   trunkImpact?: TrunkImpact;
+  gatewayImpact?: GatewayImpact;
 }
 
 export interface SimulationDetail {
@@ -104,4 +105,23 @@ export interface TrunkImpact {
   willReRegister: number;
   noService: number;
   movements: TrunkMovement[];
+}
+
+export interface GatewayMovement {
+  gatewayName: string;
+  description: string;
+  domainName: string;
+  devicePoolName: string;
+  cmGroupName: string;
+  currentCount: number;
+  newCount: number;
+  impact: "no_change" | "degraded" | "no_service";
+}
+
+export interface GatewayImpact {
+  totalGateways: number;
+  noImpact: number;
+  degraded: number;
+  noService: number;
+  movements: GatewayMovement[];
 }

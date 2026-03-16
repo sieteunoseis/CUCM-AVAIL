@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api/client";
-import type { Server, SimulationResult, TrunkImpact } from "../api/client";
+import type { Server, SimulationResult, TrunkImpact, GatewayImpact } from "../api/client";
 import { AgBadge, useAvailabilityGroups } from "../components/AgBadge";
 
 export default function Simulation() {
@@ -86,6 +86,7 @@ export default function Simulation() {
           <div className="font-mono text-[10px] uppercase tracking-widest mt-2 text-noc-text-dim">
             No Impact
             {result?.trunkImpact && <span className="normal-case tracking-normal text-noc-text-dim"> / {result.trunkImpact.noImpact} trunks</span>}
+            {result?.gatewayImpact && <span className="normal-case tracking-normal text-noc-text-dim"> / {result.gatewayImpact.noImpact} gw</span>}
           </div>
         </div>
         <div className={`p-4 text-center ${result && result.willReRegister > 0 ? "bg-noc-amber/5" : "bg-noc-surface"}`}>
@@ -95,6 +96,7 @@ export default function Simulation() {
           <div className="font-mono text-[10px] uppercase tracking-widest mt-2 text-noc-text-dim">
             Re-Register
             {result?.trunkImpact && result.trunkImpact.willReRegister > 0 && <span className="normal-case tracking-normal text-noc-amber"> / {result.trunkImpact.willReRegister} trunks</span>}
+            {result?.gatewayImpact && result.gatewayImpact.degraded > 0 && <span className="normal-case tracking-normal text-noc-amber"> / {result.gatewayImpact.degraded} gw degraded</span>}
           </div>
         </div>
         <div className={`p-4 text-center ${result && result.unregistered > 0 ? "bg-noc-red/5" : "bg-noc-surface"}`}>
@@ -104,6 +106,7 @@ export default function Simulation() {
           <div className="font-mono text-[10px] uppercase tracking-widest mt-2 text-noc-text-dim">
             Unregistered
             {result?.trunkImpact && result.trunkImpact.noService > 0 && <span className="normal-case tracking-normal text-noc-red"> / {result.trunkImpact.noService} trunks</span>}
+            {result?.gatewayImpact && result.gatewayImpact.noService > 0 && <span className="normal-case tracking-normal text-noc-red"> / {result.gatewayImpact.noService} gw</span>}
           </div>
         </div>
       </div>
@@ -252,6 +255,10 @@ export default function Simulation() {
           {/* Trunk Impact — same accordion style as CMG rows */}
           {result.trunkImpact && result.trunkImpact.totalTrunks > 0 && (
             <TrunkImpactSection trunkImpact={result.trunkImpact} cmgToAg={cmgToAg} />
+          )}
+
+          {result.gatewayImpact && result.gatewayImpact.totalGateways > 0 && (
+            <GatewayImpactSection gatewayImpact={result.gatewayImpact} cmgToAg={cmgToAg} />
           )}
         </>
       )}
@@ -523,3 +530,106 @@ function TrunkImpactSection({ trunkImpact, cmgToAg }: { trunkImpact: TrunkImpact
   );
 }
 
+function GatewayImpactSection({ gatewayImpact, cmgToAg }: { gatewayImpact: GatewayImpact; cmgToAg: Map<string, string> }) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="border border-noc-border bg-noc-surface overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full tmux-title text-noc-cyan flex items-center justify-between cursor-pointer hover:bg-noc-panel/80 transition-colors"
+      >
+        <span>MGCP Gateway Impact ({gatewayImpact.totalGateways} gateways)</span>
+        <div className="flex items-center gap-4 text-xs font-mono normal-case tracking-normal">
+          {gatewayImpact.noImpact > 0 && (
+            <span className="text-noc-green">{gatewayImpact.noImpact} ok</span>
+          )}
+          {gatewayImpact.degraded > 0 && (
+            <span className="text-noc-amber">{gatewayImpact.degraded} degraded</span>
+          )}
+          {gatewayImpact.noService > 0 && (
+            <span className="text-noc-red">{gatewayImpact.noService} no service</span>
+          )}
+          <svg
+            className={`w-4 h-4 text-noc-text-dim transition-transform ${expanded ? "rotate-180" : ""}`}
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="p-4 space-y-4">
+          <div className="grid grid-cols-3 gap-px bg-noc-border">
+            <div className="bg-noc-green/5 p-4 text-center">
+              <div className="font-mono text-2xl font-bold text-noc-green">{gatewayImpact.noImpact}</div>
+              <div className="font-mono text-[10px] uppercase tracking-widest mt-1 text-noc-text-dim">Full Service</div>
+            </div>
+            <div className="bg-noc-amber/5 p-4 text-center">
+              <div className="font-mono text-2xl font-bold text-noc-amber">{gatewayImpact.degraded}</div>
+              <div className="font-mono text-[10px] uppercase tracking-widest mt-1 text-noc-text-dim">Degraded</div>
+            </div>
+            <div className="bg-noc-red/5 p-4 text-center">
+              <div className="font-mono text-2xl font-bold text-noc-red">{gatewayImpact.noService}</div>
+              <div className="font-mono text-[10px] uppercase tracking-widest mt-1 text-noc-text-dim">No Service</div>
+            </div>
+          </div>
+
+          {(gatewayImpact.degraded > 0 || gatewayImpact.noService > 0) && (
+            <div className="overflow-x-auto border border-noc-border/50">
+              <table className="w-full text-xs font-mono" style={{ tableLayout: "fixed" }}>
+                <thead>
+                  <tr className="border-b border-noc-border/50 bg-noc-panel/50 text-noc-text-dim">
+                    <th className="text-left px-4 py-2 font-medium text-[10px] uppercase tracking-widest">Gateway</th>
+                    <th className="text-left px-4 py-2 font-medium text-[10px] uppercase tracking-widest">Domain</th>
+                    <th className="text-left px-4 py-2 font-medium text-[10px] uppercase tracking-widest">CMG</th>
+                    <th className="text-left px-4 py-2 font-medium text-[10px] uppercase tracking-widest">Endpoints</th>
+                    <th className="text-left px-4 py-2 font-medium text-[10px] uppercase tracking-widest">Impact</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {gatewayImpact.movements
+                    .filter((m) => m.impact !== "no_change")
+                    .map((m) => (
+                      <tr key={m.gatewayName} className="border-b border-noc-border/30 hover:bg-noc-panel/30 transition-colors">
+                        <td className="px-4 py-2 text-noc-text-bright truncate">{m.gatewayName}</td>
+                        <td className="px-4 py-2 text-noc-text-dim truncate">{m.domainName || "—"}</td>
+                        <td className="px-4 py-2 text-noc-text truncate">
+                          <span className="inline-flex items-center gap-1.5">
+                            {m.cmGroupName}
+                            {cmgToAg.get(m.cmGroupName) && <AgBadge label={cmgToAg.get(m.cmGroupName)!} />}
+                          </span>
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className={`font-bold ${
+                            m.newCount === 0 ? "text-noc-red" : m.newCount < m.currentCount ? "text-noc-amber" : "text-noc-green"
+                          }`}>
+                            {m.currentCount}/3 → {m.newCount}/3
+                          </span>
+                        </td>
+                        <td className="px-4 py-2">
+                          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${
+                            m.impact === "degraded"
+                              ? "bg-noc-amber/10 text-noc-amber"
+                              : "bg-noc-red/10 text-noc-red"
+                          }`}>
+                            <span className={`w-1.5 h-1.5 ${
+                              m.impact === "degraded" ? "bg-noc-amber" : "bg-noc-red"
+                            }`} />
+                            {m.impact === "degraded" ? "DEGRADED" : "NO SVC"}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}

@@ -349,6 +349,25 @@ export interface FeatureFlags {
   [key: string]: boolean;
 }
 
+export interface GatewayMovement {
+  gatewayName: string;
+  description: string;
+  domainName: string;
+  devicePoolName: string;
+  cmGroupName: string;
+  currentCount: number;
+  newCount: number;
+  impact: "no_change" | "degraded" | "no_service";
+}
+
+export interface GatewayImpact {
+  totalGateways: number;
+  noImpact: number;
+  degraded: number;
+  noService: number;
+  movements: GatewayMovement[];
+}
+
 export interface SimulationResult {
   totalPhones: number;
   noImpact: number;
@@ -356,6 +375,7 @@ export interface SimulationResult {
   unregistered: number;
   details: SimulationDetail[];
   trunkImpact?: TrunkImpact;
+  gatewayImpact?: GatewayImpact;
 }
 
 export const api = {
