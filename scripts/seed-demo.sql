@@ -367,6 +367,118 @@ INSERT INTO latest_gateway_registrations (gateway_id, registered_server_id, stat
   (8, 2, 'Registered', '10.20.50.10', datetime('now'));
 
 -- ============================================================
+-- SERVICE STATUSES
+-- Realistic distribution: CCM on all subs, EM/CTI on most,
+-- TFTP on 2 dedicated, MOH on 2 dedicated, AXL on all
+-- Server IDs: pub=1, hq-sub01=2, hq-sub02=3, hq-sub03=4,
+--             dr-sub01=5, dr-sub02=6, dr-sub03=7, br-sub01=8, br-sub02=9
+-- ============================================================
+
+-- Cisco CallManager — runs on all 8 subscribers (not publisher)
+INSERT INTO service_statuses (server_id, service_name, status, reason_code, checked_at) VALUES
+  (2, 'Cisco CallManager', 'Started', '', datetime('now')),
+  (3, 'Cisco CallManager', 'Started', '', datetime('now')),
+  (4, 'Cisco CallManager', 'Started', '', datetime('now')),
+  (5, 'Cisco CallManager', 'Started', '', datetime('now')),
+  (6, 'Cisco CallManager', 'Started', '', datetime('now')),
+  (7, 'Cisco CallManager', 'Started', '', datetime('now')),
+  (8, 'Cisco CallManager', 'Started', '', datetime('now')),
+  (9, 'Cisco CallManager', 'Started', '', datetime('now'));
+
+-- Cisco CTIManager — runs on 4 subscribers (HQ + DR primary)
+INSERT INTO service_statuses (server_id, service_name, status, reason_code, checked_at) VALUES
+  (2, 'Cisco CTIManager', 'Started', '', datetime('now')),
+  (3, 'Cisco CTIManager', 'Started', '', datetime('now')),
+  (5, 'Cisco CTIManager', 'Started', '', datetime('now')),
+  (6, 'Cisco CTIManager', 'Started', '', datetime('now'));
+
+-- Cisco Extension Mobility — runs on 6 subscribers
+INSERT INTO service_statuses (server_id, service_name, status, reason_code, checked_at) VALUES
+  (2, 'Cisco Extension Mobility', 'Started', '', datetime('now')),
+  (3, 'Cisco Extension Mobility', 'Started', '', datetime('now')),
+  (4, 'Cisco Extension Mobility', 'Started', '', datetime('now')),
+  (5, 'Cisco Extension Mobility', 'Started', '', datetime('now')),
+  (6, 'Cisco Extension Mobility', 'Started', '', datetime('now')),
+  (8, 'Cisco Extension Mobility', 'Started', '', datetime('now'));
+
+-- Cisco Tftp — dedicated pair only
+INSERT INTO service_statuses (server_id, service_name, status, reason_code, checked_at) VALUES
+  (4, 'Cisco Tftp', 'Started', '', datetime('now')),
+  (7, 'Cisco Tftp', 'Started', '', datetime('now'));
+
+-- Cisco IP Voice Media Streaming App (MOH) — dedicated pair only
+INSERT INTO service_statuses (server_id, service_name, status, reason_code, checked_at) VALUES
+  (3, 'Cisco IP Voice Media Streaming App', 'Started', '', datetime('now')),
+  (6, 'Cisco IP Voice Media Streaming App', 'Started', '', datetime('now'));
+
+-- Cisco AXL Web Service — runs on publisher + all subscribers
+INSERT INTO service_statuses (server_id, service_name, status, reason_code, checked_at) VALUES
+  (1, 'Cisco AXL Web Service', 'Started', '', datetime('now')),
+  (2, 'Cisco AXL Web Service', 'Started', '', datetime('now')),
+  (3, 'Cisco AXL Web Service', 'Started', '', datetime('now')),
+  (4, 'Cisco AXL Web Service', 'Started', '', datetime('now')),
+  (5, 'Cisco AXL Web Service', 'Started', '', datetime('now')),
+  (6, 'Cisco AXL Web Service', 'Started', '', datetime('now')),
+  (7, 'Cisco AXL Web Service', 'Started', '', datetime('now')),
+  (8, 'Cisco AXL Web Service', 'Started', '', datetime('now')),
+  (9, 'Cisco AXL Web Service', 'Started', '', datetime('now'));
+
+-- Cisco Tomcat — runs everywhere
+INSERT INTO service_statuses (server_id, service_name, status, reason_code, checked_at) VALUES
+  (1, 'Cisco Tomcat', 'Started', '', datetime('now')),
+  (2, 'Cisco Tomcat', 'Started', '', datetime('now')),
+  (3, 'Cisco Tomcat', 'Started', '', datetime('now')),
+  (4, 'Cisco Tomcat', 'Started', '', datetime('now')),
+  (5, 'Cisco Tomcat', 'Started', '', datetime('now')),
+  (6, 'Cisco Tomcat', 'Started', '', datetime('now')),
+  (7, 'Cisco Tomcat', 'Started', '', datetime('now')),
+  (8, 'Cisco Tomcat', 'Started', '', datetime('now')),
+  (9, 'Cisco Tomcat', 'Started', '', datetime('now'));
+
+-- Cisco RIS Data Collector — runs everywhere
+INSERT INTO service_statuses (server_id, service_name, status, reason_code, checked_at) VALUES
+  (1, 'Cisco RIS Data Collector', 'Started', '', datetime('now')),
+  (2, 'Cisco RIS Data Collector', 'Started', '', datetime('now')),
+  (3, 'Cisco RIS Data Collector', 'Started', '', datetime('now')),
+  (4, 'Cisco RIS Data Collector', 'Started', '', datetime('now')),
+  (5, 'Cisco RIS Data Collector', 'Started', '', datetime('now')),
+  (6, 'Cisco RIS Data Collector', 'Started', '', datetime('now')),
+  (7, 'Cisco RIS Data Collector', 'Started', '', datetime('now')),
+  (8, 'Cisco RIS Data Collector', 'Started', '', datetime('now')),
+  (9, 'Cisco RIS Data Collector', 'Started', '', datetime('now'));
+
+-- Cisco DRF Master — publisher only
+INSERT INTO service_statuses (server_id, service_name, status, reason_code, checked_at) VALUES
+  (1, 'Cisco DRF Master', 'Started', '', datetime('now'));
+
+-- Cisco DRF Local — runs everywhere
+INSERT INTO service_statuses (server_id, service_name, status, reason_code, checked_at) VALUES
+  (1, 'Cisco DRF Local', 'Started', '', datetime('now')),
+  (2, 'Cisco DRF Local', 'Started', '', datetime('now')),
+  (3, 'Cisco DRF Local', 'Started', '', datetime('now')),
+  (4, 'Cisco DRF Local', 'Started', '', datetime('now')),
+  (5, 'Cisco DRF Local', 'Started', '', datetime('now')),
+  (6, 'Cisco DRF Local', 'Started', '', datetime('now')),
+  (7, 'Cisco DRF Local', 'Started', '', datetime('now')),
+  (8, 'Cisco DRF Local', 'Started', '', datetime('now')),
+  (9, 'Cisco DRF Local', 'Started', '', datetime('now'));
+
+-- Cisco CAR Web Service — publisher only
+INSERT INTO service_statuses (server_id, service_name, status, reason_code, checked_at) VALUES
+  (1, 'Cisco CAR Web Service', 'Started', '', datetime('now'));
+
+-- Cisco CDR Agent — runs on all subscribers
+INSERT INTO service_statuses (server_id, service_name, status, reason_code, checked_at) VALUES
+  (2, 'Cisco CDR Agent', 'Started', '', datetime('now')),
+  (3, 'Cisco CDR Agent', 'Started', '', datetime('now')),
+  (4, 'Cisco CDR Agent', 'Started', '', datetime('now')),
+  (5, 'Cisco CDR Agent', 'Started', '', datetime('now')),
+  (6, 'Cisco CDR Agent', 'Started', '', datetime('now')),
+  (7, 'Cisco CDR Agent', 'Started', '', datetime('now')),
+  (8, 'Cisco CDR Agent', 'Started', '', datetime('now')),
+  (9, 'Cisco CDR Agent', 'Started', '', datetime('now'));
+
+-- ============================================================
 -- SUBNETS
 -- ============================================================
 INSERT INTO subnets (cidr, name, description) VALUES
