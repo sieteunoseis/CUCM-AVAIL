@@ -16,6 +16,7 @@ import {
   upsertGateway,
   getServerByName,
   upsertServiceStatus,
+  updateServerServiceStatus,
 } from "../db/queries.js";
 import { config } from "../config.js";
 import { checkAllServicesOnAllServers } from "./serviceability.service.js";
@@ -139,6 +140,11 @@ export async function syncAll() {
         const dbServer = getServerByName(server.name) as any;
         if (dbServer) {
           upsertServiceStatus(dbServer.id, status.serviceName, status.status, status.reasonCode);
+          // Also update ccm_service_active flag from CallManager status
+          if (status.serviceName === "Cisco CallManager") {
+            const isActive = status.status === "Started" || status.status === "started";
+            updateServerServiceStatus(dbServer.id, isActive);
+          }
           serviceCount++;
         }
       }
