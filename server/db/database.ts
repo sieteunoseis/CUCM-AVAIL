@@ -25,7 +25,28 @@ export function getDb(): Database.Database {
 function initSchema() {
   const schema = readFileSync(join(__dirname, "schema.sql"), "utf-8");
   db.exec(schema);
+  migrateSchema();
   seedLatestRegistrations();
+}
+
+function migrateSchema() {
+  // Add new columns to existing tables if they don't exist yet
+  const newCols = [
+    { table: "latest_registrations", column: "status_reason", type: "TEXT DEFAULT ''" },
+    { table: "latest_registrations", column: "dir_number", type: "TEXT DEFAULT ''" },
+    { table: "latest_registrations", column: "protocol", type: "TEXT DEFAULT ''" },
+    { table: "latest_registrations", column: "active_load_id", type: "TEXT DEFAULT ''" },
+    { table: "latest_registrations", column: "last_seen_at", type: "TEXT DEFAULT ''" },
+    { table: "latest_registrations", column: "login_user_id", type: "TEXT DEFAULT ''" },
+  ];
+
+  for (const { table, column, type } of newCols) {
+    try {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+    } catch {
+      // Column already exists — ignore
+    }
+  }
 }
 
 function seedDemoData() {

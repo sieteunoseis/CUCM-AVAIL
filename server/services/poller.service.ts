@@ -88,6 +88,12 @@ export async function runPoll() {
       registeredServerId: number | null;
       status: string;
       ipAddress: string;
+      statusReason: string;
+      dirNumber: string;
+      protocol: string;
+      activeLoadId: string;
+      lastSeenAt: string;
+      loginUserId: string;
     }[] = [];
 
     for (const node of risResults) {
@@ -100,6 +106,12 @@ export async function runPoll() {
             registeredServerId: server?.id || null,
             status: device.status,
             ipAddress: device.ipAddress,
+            statusReason: device.statusReason,
+            dirNumber: device.dirNumber,
+            protocol: device.protocol,
+            activeLoadId: device.activeLoadId,
+            lastSeenAt: device.timeStamp,
+            loginUserId: device.loginUserId,
           });
         }
       }

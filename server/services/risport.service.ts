@@ -34,6 +34,12 @@ export interface RisDeviceResult {
     name: string;
     ipAddress: string;
     status: string;
+    statusReason: string;
+    dirNumber: string;
+    protocol: string;
+    activeLoadId: string;
+    timeStamp: string;
+    loginUserId: string;
   }[];
 }
 
@@ -128,6 +134,12 @@ export async function pollRegistrations(): Promise<RisDeviceResult[]> {
         ipAddress:
           d.IPAddress?.item?.IP || d.IPAddress?.IP || d.IpAddress || "",
         status: d.Status || d.status || "Unknown",
+        statusReason: d.StatusReason || d.statusReason || "",
+        dirNumber: d.DirNumber || d.dirNumber || "",
+        protocol: d.Protocol || d.protocol || "",
+        activeLoadId: d.ActiveLoadID || d.activeLoadID || d.ActiveLoadId || "",
+        timeStamp: d.TimeStamp || d.timeStamp || "",
+        loginUserId: d.LoginUserId || d.loginUserId || "",
       }));
 
       if (existing) {

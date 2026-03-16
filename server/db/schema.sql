@@ -80,6 +80,12 @@ CREATE TABLE IF NOT EXISTS latest_registrations (
   registered_server_id INTEGER REFERENCES servers(id),
   status TEXT NOT NULL,
   ip_address TEXT DEFAULT '',
+  status_reason TEXT DEFAULT '',
+  dir_number TEXT DEFAULT '',
+  protocol TEXT DEFAULT '',
+  active_load_id TEXT DEFAULT '',
+  last_seen_at TEXT DEFAULT '',
+  login_user_id TEXT DEFAULT '',
   polled_at TEXT DEFAULT (datetime('now'))
 );
 

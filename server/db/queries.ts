@@ -170,6 +170,12 @@ export function insertRegistrationBatch(
     registeredServerId: number | null;
     status: string;
     ipAddress: string;
+    statusReason?: string;
+    dirNumber?: string;
+    protocol?: string;
+    activeLoadId?: string;
+    lastSeenAt?: string;
+    loginUserId?: string;
   }[]
 ) {
   const db = getDb();
@@ -178,18 +184,42 @@ export function insertRegistrationBatch(
      VALUES (@phoneId, @registeredServerId, @status, @ipAddress)`
   );
   const upsertLatest = db.prepare(
-    `INSERT INTO latest_registrations (phone_id, registered_server_id, status, ip_address, polled_at)
-     VALUES (@phoneId, @registeredServerId, @status, @ipAddress, datetime('now'))
+    `INSERT INTO latest_registrations (phone_id, registered_server_id, status, ip_address,
+       status_reason, dir_number, protocol, active_load_id, last_seen_at, login_user_id, polled_at)
+     VALUES (@phoneId, @registeredServerId, @status, @ipAddress,
+       @statusReason, @dirNumber, @protocol, @activeLoadId, @lastSeenAt, @loginUserId, datetime('now'))
      ON CONFLICT(phone_id) DO UPDATE SET
        registered_server_id = @registeredServerId,
        status = @status,
        ip_address = @ipAddress,
+       status_reason = @statusReason,
+       dir_number = @dirNumber,
+       protocol = @protocol,
+       active_load_id = @activeLoadId,
+       last_seen_at = @lastSeenAt,
+       login_user_id = @loginUserId,
        polled_at = datetime('now')`
   );
   const tx = db.transaction(() => {
     for (const s of snapshots) {
-      insert.run(s);
-      upsertLatest.run(s);
+      insert.run({
+        ...s,
+        statusReason: s.statusReason || "",
+        dirNumber: s.dirNumber || "",
+        protocol: s.protocol || "",
+        activeLoadId: s.activeLoadId || "",
+        lastSeenAt: s.lastSeenAt || "",
+        loginUserId: s.loginUserId || "",
+      });
+      upsertLatest.run({
+        ...s,
+        statusReason: s.statusReason || "",
+        dirNumber: s.dirNumber || "",
+        protocol: s.protocol || "",
+        activeLoadId: s.activeLoadId || "",
+        lastSeenAt: s.lastSeenAt || "",
+        loginUserId: s.loginUserId || "",
+      });
     }
   });
   tx();
@@ -199,10 +229,16 @@ export function getLatestRegistrations() {
   return getDb()
     .prepare(
       `SELECT lr.phone_id, lr.registered_server_id, lr.status, lr.ip_address, lr.polled_at,
-              p.name as phone_name, s.name as server_name, s.hostname as server_hostname
+              lr.status_reason, lr.dir_number, lr.protocol, lr.active_load_id,
+              lr.last_seen_at, lr.login_user_id,
+              p.name as phone_name, p.model, p.description as phone_description,
+              s.name as server_name, s.hostname as server_hostname,
+              dp.name as device_pool_name, cmg.name as cm_group_name
        FROM latest_registrations lr
        JOIN phones p ON lr.phone_id = p.id
-       LEFT JOIN servers s ON lr.registered_server_id = s.id`
+       LEFT JOIN servers s ON lr.registered_server_id = s.id
+       LEFT JOIN device_pools dp ON p.device_pool_id = dp.id
+       LEFT JOIN cm_groups cmg ON dp.cm_group_id = cmg.id`
     )
     .all();
 }
@@ -252,6 +288,9 @@ export function getFailoverDetails() {
          dp.name as device_pool_name,
          cmg.name as cm_group_name,
          lr.ip_address,
+         lr.dir_number,
+         lr.protocol,
+         lr.active_load_id,
          s_reg.name as registered_server,
          s_pri.name as primary_server,
          cgm_match.priority as registered_priority
