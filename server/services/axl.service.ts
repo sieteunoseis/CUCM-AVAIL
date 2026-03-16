@@ -155,9 +155,8 @@ export async function getAllGatewaysSql(): Promise<
                  dp.name as devicepool
           FROM device d
           JOIN devicepool dp ON d.fkdevicepool = dp.pkid
-          LEFT JOIN mgcpdevicemember mdm ON mdm.fkdevice = d.pkid
-          LEFT JOIN mgcp ON mdm.fkmgcp = mgcp.pkid
-          WHERE d.tkclass = 2`,
+          JOIN mgcpdevicemember mdm ON mdm.fkdevice = d.pkid
+          JOIN mgcp ON mdm.fkmgcp = mgcp.pkid`,
   });
 
   if (!result) return [];
