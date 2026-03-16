@@ -1,5 +1,6 @@
 import cron from "node-cron";
 import { config } from "../config.js";
+import { getDb } from "../db/database.js";
 import { pollRegistrations, pollTrunkRegistrations, pollGatewayRegistrations } from "./risport.service.js";
 import { checkAllServersServiceStatus } from "./serviceability.service.js";
 import {
@@ -199,6 +200,22 @@ export function startPoller() {
   emitLog(`[Poller] Scheduling polls every ${config.polling.intervalMinutes} minutes`);
   cron.schedule(cronExpr, runPoll);
 
-  // Run initial poll after a short delay to let the server start
-  setTimeout(runPoll, 5000);
+  // Only run initial poll if last poll was more than interval ago (or never)
+  setTimeout(() => {
+    try {
+      const row = getDb()
+        .prepare("SELECT MAX(polled_at) as last FROM latest_registrations")
+        .get() as any;
+      if (row?.last) {
+        const lastPoll = new Date(row.last + "Z");
+        const ageMinutes = (Date.now() - lastPoll.getTime()) / 60000;
+        if (ageMinutes < config.polling.intervalMinutes) {
+          lastPollTime = lastPoll;
+          emitLog(`[Poller] Last poll was ${Math.round(ageMinutes)}m ago, skipping initial poll`);
+          return;
+        }
+      }
+    } catch {}
+    runPoll();
+  }, 5000);
 }
