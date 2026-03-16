@@ -2,14 +2,7 @@ import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import type { ServiceStatusEntry, ServiceSummary } from "../api/client";
 
-const DISPLAY_NAMES: Record<string, string> = {
-  "Cisco CallManager": "CallManager",
-  "Cisco Extension Mobility": "Extension Mobility",
-  "Cisco CTIManager": "CTI Manager",
-  "Cisco Tftp": "TFTP",
-  "Cisco IP Voice Media Streaming App": "MOH",
-  "Cisco AXL Web Service": "AXL",
-};
+// No hardcoded list — we show whatever the Serviceability API returns
 
 export default function Services() {
   const [statuses, setStatuses] = useState<ServiceStatusEntry[]>([]);
@@ -109,18 +102,17 @@ export default function Services() {
               <tbody>
                 {serviceNames.map((service) => {
                   const row = statusLookup.get(service);
-                  const displayName = DISPLAY_NAMES[service] || service;
                   const summaryRow = summary.find((s) => s.service_name === service);
                   const activeCount = summaryRow?.active_count || 0;
                   const totalCount = summaryRow?.total_servers || 0;
 
                   return (
                     <tr key={service} className="border-b border-noc-border/50 hover:bg-noc-panel/30 transition-colors">
-                      <td className="px-4 py-2.5 text-noc-text-bright font-semibold sticky left-0 bg-noc-surface z-10">
+                      <td className="px-4 py-2.5 sticky left-0 bg-noc-surface z-10">
                         <div className="flex items-center gap-2">
-                          <span>{displayName}</span>
+                          <span className="text-noc-text-bright text-xs">{service}</span>
                           <span className={`text-[10px] font-mono ${
-                            activeCount === totalCount ? "text-noc-green" : activeCount === 0 ? "text-noc-red" : "text-noc-amber"
+                            activeCount === 0 && totalCount > 0 ? "text-noc-red" : "text-noc-text-dim"
                           }`}>
                             {activeCount}/{totalCount}
                           </span>
@@ -141,7 +133,7 @@ export default function Services() {
                                       ? "bg-noc-text-dim/30"
                                       : "bg-noc-red"
                                 }`}
-                                title={`${displayName} on ${server.split(".")[0]}: ${entry.status}`}
+                                title={`${service} on ${server.split(".")[0]}: ${entry.status}`}
                               />
                             ) : (
                               <span className="text-noc-text-dim/30">—</span>
@@ -161,6 +153,42 @@ export default function Services() {
           <p className="text-noc-text-dim text-xs font-mono">
             No service data yet. Run a sync to check service statuses across all servers.
           </p>
+        </div>
+      )}
+
+      {/* Service Groups — which servers provide each service */}
+      {statuses.length > 0 && (
+        <div className="border border-noc-border bg-noc-surface overflow-hidden">
+          <div className="tmux-title text-noc-amber">
+            Service Groups
+          </div>
+          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+            {serviceNames.map((service) => {
+              const row = statusLookup.get(service);
+              if (!row) return null;
+              const activeServers = Array.from(row.entries())
+                .filter(([, entry]) => entry.status === "Started" || entry.status === "started")
+                .map(([server]) => server.split(".")[0]);
+
+              if (activeServers.length === 0) return null;
+
+              return (
+                <div key={service} className="border border-noc-border bg-noc-bg p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="font-mono text-xs text-noc-text-bright">{service}</span>
+                    <span className="font-mono text-[10px] text-noc-green">{activeServers.length} server{activeServers.length !== 1 ? "s" : ""}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {activeServers.map((server) => (
+                      <span key={server} className="px-1.5 py-0.5 bg-noc-green/10 text-noc-green text-[10px] font-mono">
+                        {server}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 

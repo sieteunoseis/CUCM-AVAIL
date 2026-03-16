@@ -3,7 +3,7 @@ import {
   getAllServiceStatuses,
   getServiceSummary,
 } from "../db/queries.js";
-import { SERVICE_DISPLAY_NAMES, TRACKED_SERVICES } from "../services/serviceability.service.js";
+import { SERVICE_DISPLAY_NAMES } from "../services/serviceability.service.js";
 
 const router = Router();
 
@@ -19,14 +19,9 @@ router.get("/summary", (_req, res) => {
   res.json(summary);
 });
 
-// GET tracked service names with display labels
-router.get("/tracked", (_req, res) => {
-  res.json(
-    TRACKED_SERVICES.map((name) => ({
-      name,
-      displayName: SERVICE_DISPLAY_NAMES[name] || name,
-    }))
-  );
+// GET display name map
+router.get("/display-names", (_req, res) => {
+  res.json(SERVICE_DISPLAY_NAMES);
 });
 
 export default router;
