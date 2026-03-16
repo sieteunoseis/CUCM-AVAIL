@@ -639,13 +639,11 @@ function GatewayImpactSection({ gatewayImpact, cmgToAg }: { gatewayImpact: Gatew
 }
 
 function ServiceImpactSection({ serviceImpacts }: { serviceImpacts: ServiceImpact[] }) {
-  const hasImpact = serviceImpacts.some((s) => s.impact !== "no_change");
-  const degradedCount = serviceImpacts.filter((s) => s.impact === "degraded").length;
   const outageCount = serviceImpacts.filter((s) => s.impact === "outage").length;
 
   return (
     <div className={`border bg-noc-surface overflow-hidden ${
-      outageCount > 0 ? "border-noc-red/50" : degradedCount > 0 ? "border-noc-amber/50" : "border-noc-border"
+      outageCount > 0 ? "border-noc-red/50" : "border-noc-border"
     }`}>
       <div className="tmux-title text-noc-cyan flex items-center justify-between">
         <span>Service Impact ({serviceImpacts.length} services)</span>
@@ -653,11 +651,8 @@ function ServiceImpactSection({ serviceImpacts }: { serviceImpacts: ServiceImpac
           {outageCount > 0 && (
             <span className="text-noc-red font-bold">{outageCount} OUTAGE</span>
           )}
-          {degradedCount > 0 && (
-            <span className="text-noc-amber">{degradedCount} degraded</span>
-          )}
-          {!hasImpact && (
-            <span className="text-noc-green">all ok</span>
+          {outageCount === 0 && (
+            <span className="text-noc-green">all operational</span>
           )}
         </div>
       </div>
@@ -670,9 +665,7 @@ function ServiceImpactSection({ serviceImpacts }: { serviceImpacts: ServiceImpac
               className={`border p-3 ${
                 s.impact === "outage"
                   ? "border-noc-red/40 bg-noc-red/5"
-                  : s.impact === "degraded"
-                    ? "border-noc-amber/40 bg-noc-amber/5"
-                    : "border-noc-border bg-noc-bg"
+                  : "border-noc-border bg-noc-bg"
               }`}
             >
               <div className="flex items-center justify-between mb-1">
@@ -682,11 +675,9 @@ function ServiceImpactSection({ serviceImpacts }: { serviceImpacts: ServiceImpac
                 <span className={`font-mono text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 ${
                   s.impact === "outage"
                     ? "bg-noc-red/20 text-noc-red"
-                    : s.impact === "degraded"
-                      ? "bg-noc-amber/20 text-noc-amber"
-                      : "text-noc-green"
+                    : "text-noc-green"
                 }`}>
-                  {s.impact === "outage" ? "OUTAGE" : s.impact === "degraded" ? "DEGRADED" : "OK"}
+                  {s.impact === "outage" ? "OUTAGE" : "OK"}
                 </span>
               </div>
               <div className="font-mono text-[10px] text-noc-text-dim">

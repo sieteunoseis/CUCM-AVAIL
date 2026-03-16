@@ -6,7 +6,8 @@ export const TRACKED_SERVICES = [
   "Cisco Extension Mobility",
   "Cisco CTIManager",
   "Cisco Tftp",
-  "Cisco IP Voice Media Streaming App",  // MOH + MTP + Conference Bridge
+  "Cisco IP Voice Media Streaming App",
+  "Cisco AXL Web Service",
 ];
 
 // Friendly display names
@@ -15,7 +16,8 @@ export const SERVICE_DISPLAY_NAMES: Record<string, string> = {
   "Cisco Extension Mobility": "Extension Mobility",
   "Cisco CTIManager": "CTI Manager",
   "Cisco Tftp": "TFTP",
-  "Cisco IP Voice Media Streaming App": "Media Resources",
+  "Cisco IP Voice Media Streaming App": "MOH",
+  "Cisco AXL Web Service": "AXL",
 };
 
 function buildSoapEnvelope(serviceName: string): string {

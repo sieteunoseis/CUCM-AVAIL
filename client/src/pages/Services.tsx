@@ -7,7 +7,8 @@ const DISPLAY_NAMES: Record<string, string> = {
   "Cisco Extension Mobility": "Extension Mobility",
   "Cisco CTIManager": "CTI Manager",
   "Cisco Tftp": "TFTP",
-  "Cisco IP Voice Media Streaming App": "Media Resources",
+  "Cisco IP Voice Media Streaming App": "MOH",
+  "Cisco AXL Web Service": "AXL",
 };
 
 export default function Services() {
@@ -51,9 +52,8 @@ export default function Services() {
   }
 
   const totalServices = summary.length;
-  const allHealthy = summary.filter((s) => s.stopped_count === 0 && s.error_count === 0).length;
-  const degraded = summary.filter((s) => s.active_count > 0 && (s.stopped_count > 0 || s.error_count > 0)).length;
-  const outage = summary.filter((s) => s.active_count === 0).length;
+  const operational = summary.filter((s) => s.active_count > 0).length;
+  const outage = summary.filter((s) => s.active_count === 0 && s.total_servers > 0).length;
 
   return (
     <div className="space-y-3 animate-fade-in-up">
@@ -67,22 +67,16 @@ export default function Services() {
       </div>
 
       {/* Stats Row */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-noc-border">
+      <div className="grid grid-cols-3 gap-px bg-noc-border">
         <div className="bg-noc-surface p-4 text-center">
           <div className="font-mono text-3xl font-bold text-noc-cyan">{totalServices}</div>
           <div className="font-mono text-[10px] uppercase tracking-widest mt-2 text-noc-text-dim">Services Tracked</div>
         </div>
-        <div className={`p-4 text-center ${allHealthy > 0 ? "bg-noc-green/5" : "bg-noc-surface"}`}>
-          <div className={`font-mono text-3xl font-bold ${allHealthy > 0 ? "text-noc-green" : "text-noc-text-dim"}`}>
-            {allHealthy}
+        <div className={`p-4 text-center ${operational > 0 ? "bg-noc-green/5" : "bg-noc-surface"}`}>
+          <div className={`font-mono text-3xl font-bold ${operational > 0 ? "text-noc-green" : "text-noc-text-dim"}`}>
+            {operational}
           </div>
-          <div className="font-mono text-[10px] uppercase tracking-widest mt-2 text-noc-text-dim">Fully Active</div>
-        </div>
-        <div className={`p-4 text-center ${degraded > 0 ? "bg-noc-amber/5" : "bg-noc-surface"}`}>
-          <div className={`font-mono text-3xl font-bold ${degraded > 0 ? "text-noc-amber" : "text-noc-text-dim"}`}>
-            {degraded}
-          </div>
-          <div className="font-mono text-[10px] uppercase tracking-widest mt-2 text-noc-text-dim">Degraded</div>
+          <div className="font-mono text-[10px] uppercase tracking-widest mt-2 text-noc-text-dim">Operational</div>
         </div>
         <div className={`p-4 text-center ${outage > 0 ? "bg-noc-red/5" : "bg-noc-surface"}`}>
           <div className={`font-mono text-3xl font-bold ${outage > 0 ? "text-noc-red" : "text-noc-text-dim"}`}>
