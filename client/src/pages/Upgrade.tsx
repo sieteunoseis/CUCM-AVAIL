@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import type { UpgradeAnalysis, UpgradeStep, ParallelGroup } from "../api/client";
 import { AgBadge, getAgColor } from "../components/AgBadge";
+import { SgBadge } from "../components/SgBadge";
 
 function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60);
@@ -88,6 +89,7 @@ export default function Upgrade() {
             ? [`${chunk.length} servers upgrading in parallel`, `Servers: ${chunk.map((s) => s.serverName.split(".")[0]).join(", ")}`]
             : [];
           const chunkAgLabels = Array.from(new Set(chunk.flatMap((s) => s.agLabels))).sort();
+          const chunkSgLabels = Array.from(new Set(chunk.flatMap((s) => s.sgLabels || []))).sort();
           result.push({
             groupNumber: result.length + 1,
             steps: chunk,
@@ -95,6 +97,7 @@ export default function Upgrade() {
             combinedUnregistered: combinedUnreg,
             estimatedMinutes: { min: estMin, max: estMax },
             agLabels: chunkAgLabels,
+            sgLabels: chunkSgLabels,
             notes,
           });
         }
@@ -468,6 +471,9 @@ function ParallelView({
                     {group.agLabels.map((label) => (
                       <AgBadge key={label} label={label} />
                     ))}
+                    {(group.sgLabels || []).map((label) => (
+                      <SgBadge key={label} label={label} />
+                    ))}
                   </div>
                   {!isSingle && (
                     <p className="font-mono text-[10px] text-noc-cyan mt-0.5">
@@ -570,6 +576,9 @@ function ParallelView({
                         </span>
                         {step.agLabels.map((label) => (
                           <AgBadge key={label} label={label} />
+                        ))}
+                        {(step.sgLabels || []).map((label) => (
+                          <SgBadge key={label} label={label} />
                         ))}
                         <span className="font-mono text-xs text-noc-blue">
                           {formatDuration(step.estimatedMinutes.min)}–{formatDuration(step.estimatedMinutes.max)}
@@ -685,6 +694,9 @@ function StepRow({
             </span>
             {step.agLabels.map((label) => (
               <AgBadge key={label} label={label} />
+            ))}
+            {(step.sgLabels || []).map((label) => (
+              <SgBadge key={label} label={label} />
             ))}
           </div>
           {step.notes.length > 0 && (

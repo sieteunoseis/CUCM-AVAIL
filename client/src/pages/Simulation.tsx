@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api/client";
 import type { Server, SimulationResult, TrunkImpact, GatewayImpact, ServiceImpact } from "../api/client";
+import { SgBadge } from "../components/SgBadge";
 import { AgBadge, useAvailabilityGroups } from "../components/AgBadge";
 
 export default function Simulation() {
@@ -669,8 +670,9 @@ function ServiceImpactSection({ serviceImpacts }: { serviceImpacts: ServiceImpac
               }`}
             >
               <div className="flex items-center justify-between mb-1">
-                <span className="font-mono text-xs font-semibold text-noc-text-bright">
+                <span className="inline-flex items-center gap-1.5 font-mono text-xs font-semibold text-noc-text-bright">
                   {s.displayName}
+                  {s.sgLabel && <SgBadge label={s.sgLabel} />}
                 </span>
                 <span className={`font-mono text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 ${
                   s.impact === "outage"

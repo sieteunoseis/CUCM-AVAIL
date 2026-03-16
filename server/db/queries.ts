@@ -617,6 +617,51 @@ export function getServiceSummary() {
     .all();
 }
 
+// --- Service Groups ---
+
+export function getServiceGroups() {
+  const db = getDb();
+  // Get all active services grouped by server set (like AGs but for services)
+  const statuses = db
+    .prepare(
+      `SELECT ss.service_name, s.name as server_name
+       FROM service_statuses ss
+       JOIN servers s ON ss.server_id = s.id
+       WHERE ss.status IN ('Started', 'started')
+       ORDER BY ss.service_name, s.name`
+    )
+    .all() as { service_name: string; server_name: string }[];
+
+  // Group services by their server set
+  const serviceServerSets = new Map<string, { servers: string[]; services: string[] }>();
+  const serviceToServers = new Map<string, string[]>();
+
+  for (const row of statuses) {
+    if (!serviceToServers.has(row.service_name)) serviceToServers.set(row.service_name, []);
+    serviceToServers.get(row.service_name)!.push(row.server_name);
+  }
+
+  for (const [service, servers] of serviceToServers) {
+    const key = servers.sort().join(",");
+    if (!serviceServerSets.has(key)) {
+      serviceServerSets.set(key, { servers: [...servers], services: [] });
+    }
+    serviceServerSets.get(key)!.services.push(service);
+  }
+
+  // Sort by number of services (most services first), then assign SG labels
+  const groups = Array.from(serviceServerSets.values())
+    .sort((a, b) => b.services.length - a.services.length);
+
+  return groups.map((g, i) => ({
+    label: `SG-${i + 1}`,
+    servers: g.servers,
+    services: g.services,
+    serverCount: g.servers.length,
+    serviceCount: g.services.length,
+  }));
+}
+
 // --- Subnets ---
 
 export function getAllSubnets() {

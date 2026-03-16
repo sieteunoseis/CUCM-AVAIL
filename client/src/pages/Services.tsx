@@ -1,24 +1,34 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client";
-import type { ServiceStatusEntry, ServiceSummary } from "../api/client";
-
-// No hardcoded list — we show whatever the Serviceability API returns
+import type { ServiceStatusEntry, ServiceSummary, ServiceGroup } from "../api/client";
+import { SgBadge } from "../components/SgBadge";
 
 export default function Services() {
   const [statuses, setStatuses] = useState<ServiceStatusEntry[]>([]);
   const [summary, setSummary] = useState<ServiceSummary[]>([]);
+  const [serviceGroups, setServiceGroups] = useState<ServiceGroup[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     Promise.all([
       api.getServiceStatuses().catch(() => []),
       api.getServiceSummary().catch(() => []),
-    ]).then(([s, sm]) => {
+      api.getServiceGroups().catch(() => []),
+    ]).then(([s, sm, sg]) => {
       setStatuses(s);
       setSummary(sm);
+      setServiceGroups(sg);
       setLoading(false);
     });
   }, []);
+
+  // Build service → SG label map
+  const serviceToSg = new Map<string, string>();
+  for (const sg of serviceGroups) {
+    for (const svc of sg.services) {
+      serviceToSg.set(svc, sg.label);
+    }
+  }
 
   if (loading) {
     return (
@@ -111,6 +121,9 @@ export default function Services() {
                       <td className="px-4 py-2.5 sticky left-0 bg-noc-surface z-10">
                         <div className="flex items-center gap-2">
                           <span className="text-noc-text-bright text-xs">{service}</span>
+                          {serviceToSg.has(service) && (
+                            <SgBadge label={serviceToSg.get(service)!} />
+                          )}
                           <span className={`text-[10px] font-mono ${
                             activeCount === 0 && totalCount > 0 ? "text-noc-red" : "text-noc-text-dim"
                           }`}>
@@ -156,38 +169,43 @@ export default function Services() {
         </div>
       )}
 
-      {/* Service Groups — which servers provide each service */}
-      {statuses.length > 0 && (
+      {/* Service Groups — services grouped by identical server set */}
+      {serviceGroups.length > 0 && (
         <div className="border border-noc-border bg-noc-surface overflow-hidden">
           <div className="tmux-title text-noc-amber">
-            Service Groups
+            Service Groups ({serviceGroups.length})
           </div>
-          <div className="p-4 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-            {serviceNames.map((service) => {
-              const row = statusLookup.get(service);
-              if (!row) return null;
-              const activeServers = Array.from(row.entries())
-                .filter(([, entry]) => entry.status === "Started" || entry.status === "started")
-                .map(([server]) => server.split(".")[0]);
-
-              if (activeServers.length === 0) return null;
-
-              return (
-                <div key={service} className="border border-noc-border bg-noc-bg p-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="font-mono text-xs text-noc-text-bright">{service}</span>
-                    <span className="font-mono text-[10px] text-noc-green">{activeServers.length} server{activeServers.length !== 1 ? "s" : ""}</span>
-                  </div>
+          <div className="p-4 grid grid-cols-1 lg:grid-cols-2 gap-3">
+            {serviceGroups.map((sg) => (
+              <div key={sg.label} className="border border-noc-border bg-noc-bg p-3">
+                <div className="flex items-center gap-2 mb-2">
+                  <SgBadge label={sg.label} />
+                  <span className="font-mono text-[10px] text-noc-text-dim">
+                    {sg.serviceCount} service{sg.serviceCount !== 1 ? "s" : ""} on {sg.serverCount} server{sg.serverCount !== 1 ? "s" : ""}
+                  </span>
+                </div>
+                <div className="mb-2">
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-noc-text-dim mb-1">Servers</div>
                   <div className="flex flex-wrap gap-1">
-                    {activeServers.map((server) => (
+                    {sg.servers.map((server) => (
                       <span key={server} className="px-1.5 py-0.5 bg-noc-green/10 text-noc-green text-[10px] font-mono">
-                        {server}
+                        {server.split(".")[0]}
                       </span>
                     ))}
                   </div>
                 </div>
-              );
-            })}
+                <div>
+                  <div className="font-mono text-[10px] uppercase tracking-widest text-noc-text-dim mb-1">Services</div>
+                  <div className="flex flex-wrap gap-1">
+                    {sg.services.map((svc) => (
+                      <span key={svc} className="px-1.5 py-0.5 bg-noc-surface text-noc-text text-[10px] font-mono">
+                        {svc}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}

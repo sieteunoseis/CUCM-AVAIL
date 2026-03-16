@@ -175,6 +175,7 @@ export interface UpgradeStep {
     phonesUnregistered: number;
   }[];
   agLabels: string[];
+  sgLabels: string[];
   notes: string[];
   estimatedMinutes: { min: number; max: number };
 }
@@ -186,6 +187,7 @@ export interface ParallelGroup {
   combinedUnregistered: number;
   estimatedMinutes: { min: number; max: number };
   agLabels: string[];
+  sgLabels: string[];
   notes: string[];
 }
 
@@ -371,10 +373,19 @@ export interface TrackedService {
 export interface ServiceImpact {
   serviceName: string;
   displayName: string;
+  sgLabel: string;
   currentActive: number;
   newActive: number;
   totalServers: number;
   impact: "no_change" | "degraded" | "outage";
+}
+
+export interface ServiceGroup {
+  label: string;
+  servers: string[];
+  services: string[];
+  serverCount: number;
+  serviceCount: number;
 }
 
 export interface FeatureFlags {
@@ -475,6 +486,7 @@ export const api = {
   getServiceStatuses: () => get<ServiceStatusEntry[]>("/api/services"),
   getServiceSummary: () => get<ServiceSummary[]>("/api/services/summary"),
   getTrackedServices: () => get<TrackedService[]>("/api/services/tracked"),
+  getServiceGroups: () => get<ServiceGroup[]>("/api/services/groups"),
 
   // Feature Flags
   getFeatures: () => get<FeatureFlags>("/api/features"),

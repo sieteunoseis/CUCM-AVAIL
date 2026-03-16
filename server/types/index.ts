@@ -53,6 +53,7 @@ export interface SimulationRequest {
 export interface ServiceImpact {
   serviceName: string;
   displayName: string;
+  sgLabel: string;
   currentActive: number;
   newActive: number;
   totalServers: number;

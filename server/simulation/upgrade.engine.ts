@@ -1,4 +1,5 @@
 import { getDb } from "../db/database.js";
+import { getServiceGroups } from "../db/queries.js";
 
 export interface UpgradeStep {
   stepNumber: number;
@@ -18,6 +19,7 @@ export interface UpgradeStep {
   notes: string[];
   estimatedMinutes: { min: number; max: number };
   agLabels: string[];
+  sgLabels: string[];
 }
 
 export interface ParallelGroup {
@@ -27,6 +29,7 @@ export interface ParallelGroup {
   combinedUnregistered: number;
   estimatedMinutes: { min: number; max: number }; // max of individual steps (concurrent)
   agLabels: string[];
+  sgLabels: string[];
   notes: string[];
 }
 
@@ -288,6 +291,23 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
     step.agLabels = serverAgMap.get(shortName) || [];
   }
 
+  // Compute SG labels from service_statuses
+  const sgGroups = getServiceGroups();
+  const serverSgMap = new Map<string, string[]>();
+  for (const sg of sgGroups) {
+    for (const srv of sg.servers) {
+      const short = srv.split(".")[0];
+      if (!serverSgMap.has(short)) serverSgMap.set(short, []);
+      serverSgMap.get(short)!.push(sg.label);
+    }
+  }
+
+  // Populate sgLabels on each step
+  for (const step of steps) {
+    const shortName = step.serverName.split(".")[0];
+    step.sgLabels = serverSgMap.get(shortName) || [];
+  }
+
   const totalMinMin = steps.reduce((s, st) => s + st.estimatedMinutes.min, 0);
   const totalMinMax = steps.reduce((s, st) => s + st.estimatedMinutes.max, 0);
 
@@ -422,6 +442,7 @@ function makeGroup(groupNumber: number, steps: UpgradeStep[]): ParallelGroup {
   }
 
   const agLabels = Array.from(new Set(steps.flatMap((s) => s.agLabels))).sort();
+  const sgLabels = Array.from(new Set(steps.flatMap((s) => s.sgLabels))).sort();
 
   return {
     groupNumber,
@@ -430,6 +451,7 @@ function makeGroup(groupNumber: number, steps: UpgradeStep[]): ParallelGroup {
     combinedUnregistered: combinedUnreg,
     estimatedMinutes: { min: estMin, max: estMax },
     agLabels,
+    sgLabels,
     notes,
   };
 }
@@ -608,5 +630,6 @@ function computeStep(
     notes,
     estimatedMinutes,
     agLabels: [], // populated later in analyzeUpgradeOrder
+    sgLabels: [], // populated later in analyzeUpgradeOrder
   };
 }

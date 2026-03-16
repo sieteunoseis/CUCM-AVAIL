@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   getAllServiceStatuses,
   getServiceSummary,
+  getServiceGroups,
 } from "../db/queries.js";
 import { SERVICE_DISPLAY_NAMES } from "../services/serviceability.service.js";
 
@@ -22,6 +23,12 @@ router.get("/summary", (_req, res) => {
 // GET display name map
 router.get("/display-names", (_req, res) => {
   res.json(SERVICE_DISPLAY_NAMES);
+});
+
+// GET service groups (like AGs but for services)
+router.get("/groups", (_req, res) => {
+  const groups = getServiceGroups();
+  res.json(groups);
 });
 
 export default router;

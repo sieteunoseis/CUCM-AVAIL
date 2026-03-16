@@ -1,6 +1,6 @@
 import { getDb } from "../db/database.js";
 import type { SimulationResult, SimulationDetail, PhoneMovement, SubnetImpact, TrunkImpact, TrunkMovement, GatewayImpact, GatewayMovement, ServiceImpact } from "../types/index.js";
-import { getAllSubnets } from "../db/queries.js";
+import { getAllSubnets, getServiceGroups } from "../db/queries.js";
 import { ipToLong, parseSubnets, matchSubnetFast, type SubnetRow } from "../utils/subnet.js";
 import { config } from "../config.js";
 import { SERVICE_DISPLAY_NAMES } from "../services/serviceability.service.js";
@@ -170,7 +170,7 @@ export function simulateFailover(disabledServerIds: number[]): SimulationResult 
     ? simulateGatewayFailover(db, disabledSet, cmgMembersMap)
     : undefined;
 
-  // Simulate service impact
+  // Simulate service impact (with SG labels)
   const serviceImpacts = simulateServiceImpact(db, disabledSet);
 
   return {
@@ -347,7 +347,6 @@ function simulateServiceImpact(
   db: any,
   disabledSet: Set<number>
 ): ServiceImpact[] {
-  // Get all service statuses grouped by service name
   const statuses = db
     .prepare(
       `SELECT ss.service_name, ss.server_id, ss.status
@@ -356,6 +355,15 @@ function simulateServiceImpact(
     .all() as { service_name: string; server_id: number; status: string }[];
 
   if (statuses.length === 0) return [];
+
+  // Build service → SG label map
+  const sgGroups = getServiceGroups();
+  const serviceToSg = new Map<string, string>();
+  for (const sg of sgGroups) {
+    for (const svc of sg.services) {
+      serviceToSg.set(svc, sg.label);
+    }
+  }
 
   // Group by service
   const serviceMap = new Map<string, { serverId: number; isActive: boolean }[]>();
@@ -386,6 +394,7 @@ function simulateServiceImpact(
     impacts.push({
       serviceName,
       displayName: SERVICE_DISPLAY_NAMES[serviceName] || serviceName,
+      sgLabel: serviceToSg.get(serviceName) || "",
       currentActive,
       newActive,
       totalServers,
