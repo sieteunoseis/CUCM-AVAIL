@@ -186,6 +186,33 @@ const sections: Section[] = [
     ),
   },
   {
+    id: "endpoints",
+    title: "MGCP Endpoints",
+    content: (
+      <div className="space-y-3">
+        <p>Real-time MGCP endpoint registration status from RISPort. Unlike phones and SIP trunks which register to a single server, MGCP endpoints register to <strong>up to 3 subscribers simultaneously</strong>. This page requires <C>ENABLE_GATEWAYS=true</C>.</p>
+        <div className="space-y-2">
+          <H4>Endpoints View</H4>
+          <p>One row per MGCP endpoint showing its domain (parent gateway FQDN), device pool, CMG, and a registration count badge:</p>
+          <ul className="list-none space-y-1 ml-2">
+            <li><Badge color="green">3/3</Badge> — registered to all 3 subscribers in its CMG (full service)</li>
+            <li><Badge color="amber">1/3</Badge> or <Badge color="amber">2/3</Badge> — partial registration, some subscribers missing</li>
+            <li><Badge color="red">0/3</Badge> — not registered to any subscriber</li>
+          </ul>
+          <p>The "Registered Servers" column shows which specific subscribers the endpoint is connected to.</p>
+        </div>
+        <div className="space-y-2">
+          <H4>Registrations View</H4>
+          <p>One row per endpoint-server pair. Filter by server to see which endpoints are registered to a specific subscriber. Useful for verifying that all endpoints re-registered after a server restart or upgrade.</p>
+        </div>
+        <div className="space-y-2">
+          <H4>Endpoint Naming</H4>
+          <p>MGCP endpoints use the format <C>slot/subunit/port@hostname</C> — for example <C>S0/SU1/DS1-0@BNK1vgw05.example.com</C> for a T1 channel or <C>AALN/S0/SU0/0@HQ-VG310.example.com</C> for an analog port. The domain column shows the parent gateway FQDN.</p>
+        </div>
+      </div>
+    ),
+  },
+  {
     id: "upgrade",
     title: "Upgrade Sequence",
     content: (
@@ -210,8 +237,8 @@ const sections: Section[] = [
         <div className="space-y-2">
           <H4>Data Flow</H4>
           <ol className="list-none space-y-1 ml-2">
-            <li><C>AXL</C> — syncs servers, device pools, CMGs, phones, trunks from CUCM admin API</li>
-            <li><C>RISPort</C> — polls real-time registration status (which server each phone is on)</li>
+            <li><C>AXL</C> — syncs servers, device pools, CMGs, phones, trunks, and MGCP endpoints from CUCM admin API</li>
+            <li><C>RISPort</C> — polls real-time registration status for phones (DeviceClass Phone), SIP trunks (SIPTrunk), and MGCP endpoints (Gateway)</li>
             <li><C>Phone Scrape</C> — HTTP to phone web server for subnet mask discovery</li>
           </ol>
         </div>
