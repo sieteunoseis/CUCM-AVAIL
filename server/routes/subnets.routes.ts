@@ -7,7 +7,7 @@ import {
   getPhonesWithIps,
 } from "../db/queries.js";
 import { getDb } from "../db/database.js";
-import { matchSubnet, type SubnetRow } from "../utils/subnet.js";
+import { ipToLong, parseSubnets, matchSubnetFast, matchSubnet, type SubnetRow } from "../utils/subnet.js";
 import { getCached, setCache, invalidateCache } from "../services/cache.service.js";
 
 const router = Router();
@@ -62,6 +62,7 @@ router.get("/distribution", (_req, res) => {
   }
 
   const subnets = getAllSubnets() as SubnetRow[];
+  const parsed = parseSubnets(subnets);
   const phones = getPhonesWithIps() as any[];
 
   const distribution: Record<
@@ -75,7 +76,8 @@ router.get("/distribution", (_req, res) => {
   for (const phone of phones) {
     const ip = phone.ip_address;
     const cmg = phone.cm_group_name || "Unknown";
-    const matched = matchSubnet(ip, subnets);
+    if (!ip) { unmapped++; unmappedCmGroups[cmg] = (unmappedCmGroups[cmg] || 0) + 1; continue; }
+    const matched = matchSubnetFast(ipToLong(ip), parsed);
 
     if (matched) {
       if (!distribution[matched.cidr]) {
@@ -109,6 +111,7 @@ router.get("/distribution", (_req, res) => {
 // GET discover subnets — scan phone IPs and find missing /24 subnets
 router.get("/discover", (_req, res) => {
   const subnets = getAllSubnets() as SubnetRow[];
+  const parsed = parseSubnets(subnets);
   const phones = getPhonesWithIps() as any[];
 
   const missingSubnets = new Map<string, { count: number; ips: Set<string> }>();
@@ -117,7 +120,7 @@ router.get("/discover", (_req, res) => {
   for (const phone of phones) {
     const ip = phone.ip_address;
     if (!ip) continue;
-    const matched = matchSubnet(ip, subnets);
+    const matched = matchSubnetFast(ipToLong(ip), parsed);
     if (!matched) {
       totalUnmapped++;
       // Assume /24

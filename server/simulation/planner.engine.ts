@@ -1,6 +1,6 @@
 import { getDb } from "../db/database.js";
 import { getAllSubnets } from "../db/queries.js";
-import { matchSubnet, type SubnetRow } from "../utils/subnet.js";
+import { ipToLong, parseSubnets, matchSubnetFast, type SubnetRow } from "../utils/subnet.js";
 
 export interface GeoZone {
   name: string;
@@ -52,6 +52,14 @@ export interface PlannerResult {
 export function runPlanner(selectedCmgIds?: number[]): PlannerResult {
   const db = getDb();
   const subnets = getAllSubnets() as SubnetRow[];
+  const parsedSubnets = parseSubnets(subnets);
+
+  // Pre-load server CCM active status
+  const serverCcmActive = new Map<number, boolean>();
+  const allServers = db.prepare("SELECT id, ccm_service_active FROM servers").all() as any[];
+  for (const s of allServers) {
+    serverCcmActive.set(s.id, s.ccm_service_active === 1);
+  }
 
   // Get all phones with their IPs and current assignments
   const phones = db
@@ -174,12 +182,7 @@ export function runPlanner(selectedCmgIds?: number[]): PlannerResult {
   // All CMGs for selection UI
   const allCmgs = cmGroups.map((cmg: any) => {
     const members = cmgMembers.get(cmg.id) || [];
-    const ccmActive = members.some((m: any) => {
-      const server = db
-        .prepare("SELECT ccm_service_active FROM servers WHERE id = ?")
-        .get(m.server_id) as any;
-      return server?.ccm_service_active === 1;
-    });
+    const ccmActive = members.some((m: any) => serverCcmActive.get(m.server_id) === true);
     return {
       id: cmg.id,
       name: cmg.name,
@@ -233,7 +236,9 @@ export function runPlanner(selectedCmgIds?: number[]): PlannerResult {
 
   for (const phone of phones) {
     const ip = phone.ip_address || "";
-    const matched = matchSubnet(ip, subnets);
+    if (!ip) { unmapped++; unmappedPhones.push(phone); continue; }
+    const ipNum = ipToLong(ip);
+    const matched = matchSubnetFast(ipNum, parsedSubnets);
     if (matched) {
       const key = matched.name;
       if (!subnetPhones.has(key)) {
@@ -262,12 +267,7 @@ export function runPlanner(selectedCmgIds?: number[]): PlannerResult {
       return selectedCmgIds.includes(cmg.id);
     }
     const members = cmgMembers.get(cmg.id) || [];
-    return members.some((m: any) => {
-      const server = db
-        .prepare("SELECT ccm_service_active FROM servers WHERE id = ?")
-        .get(m.server_id) as any;
-      return server?.ccm_service_active === 1;
-    });
+    return members.some((m: any) => serverCcmActive.get(m.server_id) === true);
   });
 
   // Greedy bin-packing: assign geo zones to CMGs to balance phone counts

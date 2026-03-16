@@ -48,3 +48,37 @@ export function matchSubnet(ip: string, subnets: SubnetRow[]): SubnetRow | null 
   }
   return bestMatch;
 }
+
+/**
+ * Pre-parsed subnet for fast bulk matching (avoids re-parsing CIDR per phone).
+ */
+export interface ParsedSubnet {
+  row: SubnetRow;
+  network: number;
+  mask: number;
+  bits: number;
+}
+
+export function parseSubnets(subnets: SubnetRow[]): ParsedSubnet[] {
+  const result: ParsedSubnet[] = [];
+  for (const s of subnets) {
+    const parsed = parseCidr(s.cidr);
+    if (!parsed) continue;
+    const bitsMatch = s.cidr.match(/\/(\d+)$/);
+    const bits = bitsMatch ? parseInt(bitsMatch[1], 10) : 0;
+    result.push({ row: s, network: parsed.network, mask: parsed.mask, bits });
+  }
+  return result;
+}
+
+export function matchSubnetFast(ipLong: number, parsed: ParsedSubnet[]): SubnetRow | null {
+  let bestMatch: SubnetRow | null = null;
+  let bestBits = -1;
+  for (const s of parsed) {
+    if ((ipLong & s.mask) === s.network && s.bits > bestBits) {
+      bestMatch = s.row;
+      bestBits = s.bits;
+    }
+  }
+  return bestMatch;
+}
