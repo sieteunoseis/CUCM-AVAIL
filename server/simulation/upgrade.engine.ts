@@ -354,8 +354,8 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
   const totalMinMin = steps.reduce((s, st) => s + st.estimatedMinutes.min, 0);
   const totalMinMax = steps.reduce((s, st) => s + st.estimatedMinutes.max, 0);
 
-  // Build parallel groups
-  const parallelGroups = buildParallelGroups(steps, cmGroups, cmgMembers);
+  // Build parallel groups (with SG conflict checking)
+  const parallelGroups = buildParallelGroups(steps, cmGroups, cmgMembers, serviceServerMap);
 
   const parallelTotalMin = parallelGroups.reduce((s, g) => s + g.estimatedMinutes.min, 0);
   const parallelTotalMax = parallelGroups.reduce((s, g) => s + g.estimatedMinutes.max, 0);
@@ -398,7 +398,8 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
 function buildParallelGroups(
   steps: UpgradeStep[],
   cmGroups: any[],
-  cmgMembers: Map<number, any[]>
+  cmgMembers: Map<number, any[]>,
+  serviceServerMap: Map<string, Set<number>>
 ): ParallelGroup[] {
   if (steps.length === 0) return [];
 
@@ -431,6 +432,7 @@ function buildParallelGroups(
     // Try to find other steps that can run in parallel with this one
     const groupSteps = [step];
     const groupCmgs = new Set(serverCmgSets.get(step.serverId) || []);
+    const groupServerIds = new Set([step.serverId]);
 
     for (let j = i + 1; j < steps.length; j++) {
       if (assigned.has(j)) continue;
@@ -442,7 +444,7 @@ function buildParallelGroups(
 
       const candidateCmgs = serverCmgSets.get(candidate.serverId) || new Set();
 
-      // Check if candidate shares any CMGs with the current group
+      // Check 1: CMG overlap — don't take down two servers in the same CMG
       let hasOverlap = false;
       for (const cmgId of candidateCmgs) {
         if (groupCmgs.has(cmgId)) {
@@ -450,16 +452,37 @@ function buildParallelGroups(
           break;
         }
       }
+      if (hasOverlap) continue;
 
-      // Non-CCM servers with no CMG overlap can always be parallelized
-      // CCM servers can be parallelized only if they have no CMG overlap
-      if (!hasOverlap) {
-        groupSteps.push(candidate);
-        assigned.add(j);
-        // Add candidate's CMGs to the group's CMG set
-        for (const cmgId of candidateCmgs) {
-          groupCmgs.add(cmgId);
+      // Check 2: Service outage — adding this candidate to the group must not
+      // cause any service to have 0 active instances remaining
+      let wouldCauseOutage = false;
+      const combinedDown = new Set([...groupServerIds, candidate.serverId]);
+      for (const [, activeServers] of serviceServerMap) {
+        let remaining = 0;
+        for (const sid of activeServers) {
+          if (!combinedDown.has(sid)) remaining++;
         }
+        if (remaining === 0 && activeServers.size > 0) {
+          // Check that at least one server in the group is actually in this service
+          let groupHasService = false;
+          for (const sid of combinedDown) {
+            if (activeServers.has(sid)) { groupHasService = true; break; }
+          }
+          if (groupHasService) {
+            wouldCauseOutage = true;
+            break;
+          }
+        }
+      }
+      if (wouldCauseOutage) continue;
+
+      // Safe to parallelize
+      groupSteps.push(candidate);
+      assigned.add(j);
+      groupServerIds.add(candidate.serverId);
+      for (const cmgId of candidateCmgs) {
+        groupCmgs.add(cmgId);
       }
     }
 
