@@ -135,10 +135,17 @@ export async function pollRegistrations(): Promise<RisDeviceResult[]> {
           d.IPAddress?.item?.IP || d.IPAddress?.IP || d.IpAddress || "",
         status: d.Status || d.status || "Unknown",
         statusReason: d.StatusReason || d.statusReason || "",
-        dirNumber: d.DirNumber || d.dirNumber || "",
+        dirNumber: (d.DirNumber || d.dirNumber || "").replace(/-(?:Registered|UnRegistered|Rejected|PartiallyRegistered|Unknown)$/, ""),
         protocol: d.Protocol || d.protocol || "",
         activeLoadId: d.ActiveLoadID || d.activeLoadID || d.ActiveLoadId || "",
-        timeStamp: d.TimeStamp || d.timeStamp || "",
+        timeStamp: (() => {
+          const ts = d.TimeStamp || d.timeStamp || "";
+          if (!ts) return "";
+          // Convert Unix epoch to ISO string
+          const num = parseInt(ts, 10);
+          if (!isNaN(num) && num > 1000000000) return new Date(num * 1000).toISOString();
+          return ts;
+        })(),
         loginUserId: d.LoginUserId || d.loginUserId || "",
       }));
 
