@@ -140,59 +140,6 @@ export default function Upgrade() {
         </p>
       </div>
 
-      {/* Scoring Formula */}
-      <details className="border border-noc-border bg-noc-surface overflow-hidden">
-        <summary className="tmux-title text-noc-text-dim cursor-pointer hover:text-noc-text transition-colors select-none">
-          Upgrade Order Formula
-        </summary>
-        <div className="p-4 font-mono text-xs text-noc-text space-y-3">
-          <div>
-            <span className="text-noc-amber font-semibold">score = primaryPenalty + lastServicePenalty + phoneImpact</span>
-            <span className="text-noc-text-dim ml-2">(lowest score upgrades first)</span>
-          </div>
-          <ol className="list-none space-y-2 ml-2">
-            <li className="flex gap-2">
-              <span className="text-noc-cyan shrink-0">1.</span>
-              <div>
-                <span className="text-noc-text-bright">Publisher first</span>
-                <span className="text-noc-text-dim"> — Cisco requirement, always step 1</span>
-              </div>
-            </li>
-            <li className="flex gap-2">
-              <span className="text-noc-cyan shrink-0">2.</span>
-              <div>
-                <span className="text-noc-text-bright">Backup CMG members before primary</span>
-                <span className="text-noc-text-dim"> — P1 servers get +100K penalty, pushing them after P2/P3 members are already upgraded and back online</span>
-              </div>
-            </li>
-            <li className="flex gap-2">
-              <span className="text-noc-cyan shrink-0">3.</span>
-              <div>
-                <span className="text-noc-text-bright">Avoid last-active service outage</span>
-                <span className="text-noc-text-dim"> — if upgrading a server would cause any service (SG) to have 0 active instances, +50K penalty per service. Defers that server until others in the same SG are back online</span>
-              </div>
-            </li>
-            <li className="flex gap-2">
-              <span className="text-noc-cyan shrink-0">4.</span>
-              <div>
-                <span className="text-noc-text-bright">Least phone re-registrations</span>
-                <span className="text-noc-text-dim"> — tiebreaker: server affecting fewest phones goes first</span>
-              </div>
-            </li>
-            <li className="flex gap-2">
-              <span className="text-noc-cyan shrink-0">5.</span>
-              <div>
-                <span className="text-noc-text-bright">Non-CCM nodes last</span>
-                <span className="text-noc-text-dim"> — TFTP, MOH, media servers have no call processing impact and can be upgraded in parallel if redundant</span>
-              </div>
-            </li>
-          </ol>
-          <div className="text-[10px] text-noc-text-dim border-t border-noc-border/50 pt-2 mt-2">
-            Parallel mode groups servers from independent AGs that can be upgraded simultaneously without overlapping phone impact.
-          </div>
-        </div>
-      </details>
-
       {/* Mode Toggle */}
       <div className="flex items-center gap-3">
         <label className="font-mono text-[10px] uppercase tracking-widest text-noc-text-dim shrink-0">
@@ -413,6 +360,59 @@ export default function Upgrade() {
           startTime={startTime}
         />
       )}
+
+      {/* Scoring Formula — always visible at bottom */}
+      <div className="border border-noc-border bg-noc-surface overflow-hidden">
+        <div className="tmux-title text-noc-text-dim">
+          Upgrade Order Formula
+        </div>
+        <div className="p-4 font-mono text-xs text-noc-text space-y-3">
+          <div>
+            <span className="text-noc-amber font-semibold">score = primaryPenalty + lastServicePenalty + phoneImpact</span>
+            <span className="text-noc-text-dim ml-2">(lowest score upgrades first)</span>
+          </div>
+          <ol className="list-none space-y-2 ml-2">
+            <li className="flex gap-2">
+              <span className="text-noc-cyan shrink-0">1.</span>
+              <div>
+                <span className="text-noc-text-bright">Publisher first</span>
+                <span className="text-noc-text-dim"> — Cisco requirement, always step 1</span>
+              </div>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-noc-cyan shrink-0">2.</span>
+              <div>
+                <span className="text-noc-text-bright">Backup CMG members before primary</span>
+                <span className="text-noc-text-dim"> — P1 servers get +100K penalty, pushing them after P2/P3 members are already upgraded and back online</span>
+              </div>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-noc-cyan shrink-0">3.</span>
+              <div>
+                <span className="text-noc-text-bright">Avoid last-active service outage</span>
+                <span className="text-noc-text-dim"> — if upgrading a server would cause any service (SG) to have 0 active instances, +50K penalty per service. Defers that server until others in the same SG are back online</span>
+              </div>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-noc-cyan shrink-0">4.</span>
+              <div>
+                <span className="text-noc-text-bright">Least phone re-registrations</span>
+                <span className="text-noc-text-dim"> — tiebreaker: server affecting fewest phones goes first</span>
+              </div>
+            </li>
+            <li className="flex gap-2">
+              <span className="text-noc-cyan shrink-0">5.</span>
+              <div>
+                <span className="text-noc-text-bright">Non-CCM nodes last</span>
+                <span className="text-noc-text-dim"> — TFTP, MOH, media servers have no call processing impact and can be upgraded in parallel if redundant</span>
+              </div>
+            </li>
+          </ol>
+          <div className="text-[10px] text-noc-text-dim border-t border-noc-border/50 pt-2 mt-2">
+            The scoring formula is the same for sequential and parallel modes. Parallel mode uses the same ordered sequence but groups adjacent servers from independent AGs that can be upgraded simultaneously without overlapping phone or service impact.
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

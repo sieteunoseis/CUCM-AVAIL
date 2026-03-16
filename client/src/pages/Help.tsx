@@ -105,6 +105,14 @@ const sections: Section[] = [
           <H4>Trunk Impact</H4>
           <p>SIP trunks follow the same CMG failover logic. Trunks that lose all servers show as "NO SERVICE".</p>
         </div>
+        <div className="space-y-2">
+          <H4>Gateway Impact</H4>
+          <p>MGCP gateways register to multiple servers. The impact shows how many endpoint registrations survive (e.g., 3/3 → 1/3 = DEGRADED, 3/3 → 0/3 = NO SERVICE). Requires <C>ENABLE_GATEWAYS=true</C>.</p>
+        </div>
+        <div className="space-y-2">
+          <H4>Service Impact</H4>
+          <p>Shows which CUCM services would experience an outage if all active instances of that service are on disabled servers. Each service card shows its SG badge and active instance count transition. Only flags OUTAGE (0 instances remaining) — partial loss is expected when services are intentionally isolated to specific servers.</p>
+        </div>
       </div>
     ),
   },
@@ -213,18 +221,46 @@ const sections: Section[] = [
     ),
   },
   {
+    id: "services",
+    title: "Services",
+    content: (
+      <div className="space-y-3">
+        <p>Monitors all customer-facing CUCM services across every subscriber. The Serviceability API is queried during each AXL sync to discover which services are running on which servers.</p>
+        <div className="space-y-2">
+          <H4>Service Status Matrix</H4>
+          <p>A grid of services (rows) × servers (columns). Green squares indicate the service is Started, gray means Stopped or Not Activated, red means Error. Each row shows an active count (e.g., 8/13).</p>
+        </div>
+        <div className="space-y-2">
+          <H4>Service Groups (SG)</H4>
+          <p>Like Availability Groups (AG) for call processing, Service Groups identify which services share the same server set. Services running on the exact same set of servers belong to the same SG. SG badges appear next to service names and on the Upgrade Sequence and Simulation pages.</p>
+          <p>For example, if Extension Mobility and CTI Manager both run on the same 8 servers, they share an SG. If TFTP only runs on 2 dedicated servers, it gets its own SG. This helps identify single points of failure — if an SG has only 1 server, losing that server means a full service outage.</p>
+        </div>
+      </div>
+    ),
+  },
+  {
     id: "upgrade",
     title: "Upgrade Sequence",
     content: (
       <div className="space-y-3">
-        <p>Calculates the optimal order to upgrade CUCM servers to minimize phone re-registrations and avoid outages.</p>
+        <p>Calculates the optimal order to upgrade CUCM servers to minimize phone re-registrations and avoid service outages.</p>
         <div className="space-y-2">
-          <H4>Sequential vs Parallel</H4>
-          <p>The sequential view shows one server at a time with per-step impact. The parallel view groups servers that can be upgraded simultaneously (servers in the same AG that don't share P1 duties).</p>
+          <H4>Scoring Formula</H4>
+          <p>Each server gets a score — lowest score upgrades first:</p>
+          <ul className="list-none space-y-1 ml-2">
+            <li><C>+100K</C> — primary CMG member (P1 servers upgrade after their backups)</li>
+            <li><C>+50K</C> — per service that would go to 0 active instances (avoids service outage)</li>
+            <li><C>+N</C> — number of phones that will re-register (tiebreaker)</li>
+          </ul>
+          <p>Publisher always goes first per Cisco requirements. Non-CCM nodes (TFTP, MOH) go last.</p>
         </div>
         <div className="space-y-2">
-          <H4>AG Context</H4>
-          <p>Each step shows which AGs are impacted, along with affected CMGs and re-registration counts. This helps identify which parts of the phone population will be disrupted at each phase.</p>
+          <H4>Sequential vs Parallel</H4>
+          <p>Both modes use the same scoring formula. Sequential upgrades one server at a time. Parallel groups servers from independent AGs that can be upgraded simultaneously without overlapping phone or service impact.</p>
+        </div>
+        <div className="space-y-2">
+          <H4>AG + SG Context</H4>
+          <p>Each step shows AG badges (which phone groups are affected) and SG badges (which service groups are affected). Steps that would cause a service outage include a warning note.</p>
         </div>
       </div>
     ),
