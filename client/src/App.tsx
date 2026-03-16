@@ -25,7 +25,7 @@ const BASE_PAGES: { key: Page; label: string; feature?: string }[] = [
   { key: "firmware", label: "firmware" },
   { key: "planner", label: "planner" },
   { key: "trunks", label: "trunks" },
-  { key: "gateways", label: "gateways", feature: "enableGateways" },
+  { key: "gateways", label: "endpoints", feature: "enableGateways" },
   { key: "upgrade", label: "upgrade" },
   { key: "help", label: "help" },
 ];

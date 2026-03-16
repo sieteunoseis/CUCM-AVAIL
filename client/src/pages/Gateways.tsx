@@ -50,7 +50,7 @@ export default function Gateways() {
         <div className="text-center">
           <div className="inline-block w-8 h-8 border-2 border-noc-amber border-t-transparent rounded-full animate-spin" />
           <p className="text-noc-text-dim text-xs font-mono mt-3 uppercase tracking-widest">
-            Loading gateway data...
+            Loading endpoint data...
           </p>
         </div>
       </div>
@@ -61,10 +61,10 @@ export default function Gateways() {
     <div className="space-y-3 animate-fade-in-up">
       <div>
         <h1 className="font-mono text-sm font-semibold uppercase tracking-widest text-noc-text-bright">
-          MGCP Gateway Monitor
+          MGCP Endpoint Monitor
         </h1>
         <p className="text-xs font-mono text-noc-text-dim mt-1">
-          Real-time MGCP gateway registration status — each gateway registers to up to 3 subscribers
+          Real-time MGCP endpoint registration status — each endpoint registers to up to 3 subscribers
         </p>
       </div>
 
@@ -73,7 +73,7 @@ export default function Gateways() {
         <div className="bg-noc-surface p-4 text-center">
           <div className="font-mono text-3xl font-bold text-noc-cyan">{totalGateways}</div>
           <div className="font-mono text-[10px] uppercase tracking-widest mt-2 text-noc-text-dim">
-            Total Gateways
+            Total Endpoints
           </div>
         </div>
         <div className={`p-4 text-center ${fullService > 0 ? "bg-noc-green/5" : "bg-noc-surface"}`}>
@@ -126,10 +126,10 @@ export default function Gateways() {
           <div className="relative z-10 flex h-full">
             <div className={`w-1/2 flex items-center justify-center font-mono text-[9px] font-bold uppercase tracking-wider select-none transition-colors ${
               view === "summary" ? "text-noc-bg" : "text-noc-text-dim"
-            }`}>summary</div>
+            }`}>endpoints</div>
             <div className={`w-1/2 flex items-center justify-center font-mono text-[9px] font-bold uppercase tracking-wider select-none transition-colors ${
               view === "detail" ? "text-noc-bg" : "text-noc-text-dim"
-            }`}>detail</div>
+            }`}>registrations</div>
           </div>
         </button>
 
@@ -172,13 +172,13 @@ export default function Gateways() {
       {view === "summary" && (
         <div className="border border-noc-border bg-noc-surface overflow-hidden pane-resize">
           <div className="tmux-title text-noc-cyan">
-            Gateway Summary ({summary.length})
+            MGCP Endpoints ({summary.length})
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs font-mono" style={{ tableLayout: "fixed" }}>
               <thead>
                 <tr className="border-b border-noc-border bg-noc-panel/50 text-noc-text-dim">
-                  <ColHeader label="Gateway" sortKey="gw" sort={gwSort} onSort={toggleGwSort} className="w-[18%]" />
+                  <ColHeader label="Endpoint" sortKey="gw" sort={gwSort} onSort={toggleGwSort} className="w-[18%]" />
                   <ColHeader label="Description" sortKey="desc" sort={gwSort} onSort={toggleGwSort} className="w-[15%]" />
                   <ColHeader label="Domain" sortKey="domain" sort={gwSort} onSort={toggleGwSort} className="w-[15%]" />
                   <ColHeader label="Device Pool" sortKey="pool" sort={gwSort} onSort={toggleGwSort} className="w-[13%]" />
@@ -191,7 +191,7 @@ export default function Gateways() {
                 {summary.length === 0 ? (
                   <tr>
                     <td colSpan={7} className="px-4 py-8 text-center text-noc-text-dim">
-                      No gateways configured. Run a sync to discover MGCP gateways.
+                      No MGCP endpoints found. Run a sync to discover endpoints.
                     </td>
                   </tr>
                 ) : (
@@ -258,13 +258,13 @@ export default function Gateways() {
         return (
           <div className="border border-noc-border bg-noc-surface overflow-hidden pane-resize">
             <div className="tmux-title text-noc-cyan">
-              Gateway Registrations ({filtered.length}{activeServer ? ` on ${activeServer.split(".")[0]}` : ""})
+              Registrations ({filtered.length}{activeServer ? ` on ${activeServer.split(".")[0]}` : ""})
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs font-mono" style={{ tableLayout: "fixed" }}>
                 <thead>
                   <tr className="border-b border-noc-border bg-noc-panel/50 text-noc-text-dim">
-                    <ColHeader label="Gateway" sortKey="gw" sort={detSort} onSort={toggleDetSort} className="w-[18%]" />
+                    <ColHeader label="Endpoint" sortKey="gw" sort={detSort} onSort={toggleDetSort} className="w-[18%]" />
                     <ColHeader label="Description" sortKey="desc" sort={detSort} onSort={toggleDetSort} className="w-[15%]" />
                     <ColHeader label="Server" sortKey="server" sort={detSort} onSort={toggleDetSort} />
                     <ColHeader label="Device Pool" sortKey="pool" sort={detSort} onSort={toggleDetSort} />
@@ -277,7 +277,7 @@ export default function Gateways() {
                   {filtered.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-4 py-8 text-center text-noc-text-dim">
-                        {activeServer ? "No gateways registered on this server." : "No gateway registration data yet."}
+                        {activeServer ? "No endpoints registered on this server." : "No registration data yet."}
                       </td>
                     </tr>
                   ) : (
