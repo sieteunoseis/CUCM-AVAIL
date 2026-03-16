@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { readFileSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { fileURLToPath } from "url";
 import { dirname, join } from "path";
 import { config } from "../config.js";
@@ -15,6 +15,9 @@ export function getDb(): Database.Database {
     db.pragma("journal_mode = WAL");
     db.pragma("foreign_keys = ON");
     initSchema();
+    if (config.features.demoMode) {
+      seedDemoData();
+    }
   }
   return db;
 }
@@ -23,6 +26,26 @@ function initSchema() {
   const schema = readFileSync(join(__dirname, "schema.sql"), "utf-8");
   db.exec(schema);
   seedLatestRegistrations();
+}
+
+function seedDemoData() {
+  // Only seed if DB is empty (no servers = fresh DB)
+  const count = (db.prepare("SELECT COUNT(*) as c FROM servers").get() as any).c;
+  if (count > 0) return;
+
+  const candidates = [
+    join(__dirname, "../scripts/seed-demo.sql"),    // Docker
+    join(__dirname, "../../scripts/seed-demo.sql"),  // Local build
+  ];
+  const seedPath = candidates.find((p) => existsSync(p));
+  if (!seedPath) {
+    console.warn("[DB] Demo mode enabled but seed-demo.sql not found");
+    return;
+  }
+
+  const seed = readFileSync(seedPath, "utf-8");
+  db.exec(seed);
+  console.log("[DB] Demo database seeded with sample data");
 }
 
 function seedLatestRegistrations() {

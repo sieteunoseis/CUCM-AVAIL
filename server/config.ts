@@ -19,5 +19,6 @@ export const config = {
   },
   features: {
     enableGateways: (process.env.ENABLE_GATEWAYS || "false").toLowerCase() === "true",
+    demoMode: (process.env.DEMO_MODE || "false").toLowerCase() === "true",
   },
 };

@@ -46,6 +46,13 @@ export function isPollInProgress() {
 }
 
 export async function runPoll() {
+  if (config.features.demoMode) {
+    emitLog("[Poller] Demo mode — skipping poll (using seed data)");
+    lastPollTime = new Date();
+    if (onPollComplete) onPollComplete();
+    return;
+  }
+
   if (pollInProgress) {
     emitLog("[Poller] Poll already in progress, skipping");
     return;
