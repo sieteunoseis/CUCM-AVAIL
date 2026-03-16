@@ -15,8 +15,10 @@ import {
   upsertTrunk,
   upsertGateway,
   getServerByName,
+  upsertServiceStatus,
 } from "../db/queries.js";
 import { config } from "../config.js";
+import { checkAllServicesOnAllServers } from "./serviceability.service.js";
 
 export async function syncAll() {
   console.log("[Sync] Starting full AXL sync...");
@@ -126,6 +128,26 @@ export async function syncAll() {
     }
   }
 
+  // 7. Check customer-facing services on all servers
+  let serviceCount = 0;
+  try {
+    const hostnames = servers.map((s) => s.hostname);
+    const statuses = await checkAllServicesOnAllServers(hostnames);
+    for (const status of statuses) {
+      const server = servers.find((s) => s.hostname === status.serverHostname);
+      if (server) {
+        const dbServer = getServerByName(server.name) as any;
+        if (dbServer) {
+          upsertServiceStatus(dbServer.id, status.serviceName, status.status, status.reasonCode);
+          serviceCount++;
+        }
+      }
+    }
+    console.log(`[Sync] Checked ${serviceCount} service statuses across ${hostnames.length} servers`);
+  } catch (e) {
+    console.error("[Sync] Service status check failed (non-fatal):", e);
+  }
+
   return {
     servers: servers.length,
     cmGroups: cmGroups.length,
@@ -133,5 +155,6 @@ export async function syncAll() {
     phones: phoneCount,
     trunks: trunkCount,
     gateways: gatewayCount,
+    services: serviceCount,
   };
 }

@@ -120,6 +120,16 @@ CREATE TABLE IF NOT EXISTS latest_gateway_registrations (
 
 CREATE INDEX IF NOT EXISTS idx_gw_snap_latest ON gateway_snapshots(gateway_id, polled_at DESC);
 
+CREATE TABLE IF NOT EXISTS service_statuses (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  server_id INTEGER NOT NULL REFERENCES servers(id),
+  service_name TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'Unknown',
+  reason_code TEXT DEFAULT '',
+  checked_at TEXT DEFAULT (datetime('now')),
+  UNIQUE(server_id, service_name)
+);
+
 CREATE INDEX IF NOT EXISTS idx_reg_latest ON registration_snapshots(phone_id, polled_at DESC);
 CREATE INDEX IF NOT EXISTS idx_phones_pool ON phones(device_pool_id);
 CREATE INDEX IF NOT EXISTS idx_cmg_members ON cm_group_members(cm_group_id, priority);

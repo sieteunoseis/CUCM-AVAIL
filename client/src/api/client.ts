@@ -344,6 +344,39 @@ export interface GatewaySummary {
   registered_servers: string | null;
 }
 
+export interface ServiceStatusEntry {
+  id: number;
+  server_id: number;
+  service_name: string;
+  status: string;
+  reason_code: string;
+  checked_at: string;
+  server_name: string;
+  server_hostname: string;
+}
+
+export interface ServiceSummary {
+  service_name: string;
+  total_servers: number;
+  active_count: number;
+  stopped_count: number;
+  error_count: number;
+}
+
+export interface TrackedService {
+  name: string;
+  displayName: string;
+}
+
+export interface ServiceImpact {
+  serviceName: string;
+  displayName: string;
+  currentActive: number;
+  newActive: number;
+  totalServers: number;
+  impact: "no_change" | "degraded" | "outage";
+}
+
 export interface FeatureFlags {
   enableGateways: boolean;
   [key: string]: boolean;
@@ -376,6 +409,7 @@ export interface SimulationResult {
   details: SimulationDetail[];
   trunkImpact?: TrunkImpact;
   gatewayImpact?: GatewayImpact;
+  serviceImpacts?: ServiceImpact[];
 }
 
 export const api = {
@@ -436,6 +470,11 @@ export const api = {
 
   // Availability Groups
   getAvailabilityGroups: () => get<AvailabilityGroup[]>("/api/ag"),
+
+  // Services
+  getServiceStatuses: () => get<ServiceStatusEntry[]>("/api/services"),
+  getServiceSummary: () => get<ServiceSummary[]>("/api/services/summary"),
+  getTrackedServices: () => get<TrackedService[]>("/api/services/tracked"),
 
   // Feature Flags
   getFeatures: () => get<FeatureFlags>("/api/features"),

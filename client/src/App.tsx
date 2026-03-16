@@ -11,11 +11,12 @@ import AvailabilityGroups from "./pages/AvailabilityGroups";
 import Planner from "./pages/Planner";
 import Trunks from "./pages/Trunks";
 import Gateways from "./pages/Gateways";
+import Services from "./pages/Services";
 import Help from "./pages/Help";
 
 const SOCKET_URL = import.meta.env.DEV ? "http://localhost:3000" : "";
 
-type Page = "dashboard" | "ag" | "simulation" | "subnets" | "upgrade" | "firmware" | "planner" | "trunks" | "gateways" | "help";
+type Page = "dashboard" | "ag" | "simulation" | "subnets" | "upgrade" | "firmware" | "planner" | "trunks" | "gateways" | "services" | "help";
 
 const BASE_PAGES: { key: Page; label: string; feature?: string }[] = [
   { key: "dashboard", label: "dashboard" },
@@ -26,6 +27,7 @@ const BASE_PAGES: { key: Page; label: string; feature?: string }[] = [
   { key: "planner", label: "planner" },
   { key: "trunks", label: "trunks" },
   { key: "gateways", label: "gateways", feature: "enableGateways" },
+  { key: "services", label: "services" },
   { key: "upgrade", label: "upgrade" },
   { key: "help", label: "help" },
 ];
@@ -155,6 +157,8 @@ function App() {
           <Trunks />
         ) : page === "gateways" ? (
           <Gateways />
+        ) : page === "services" ? (
+          <Services />
         ) : page === "help" ? (
           <Help />
         ) : (

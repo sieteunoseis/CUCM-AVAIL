@@ -1,8 +1,9 @@
 import { getDb } from "../db/database.js";
-import type { SimulationResult, SimulationDetail, PhoneMovement, SubnetImpact, TrunkImpact, TrunkMovement, GatewayImpact, GatewayMovement } from "../types/index.js";
+import type { SimulationResult, SimulationDetail, PhoneMovement, SubnetImpact, TrunkImpact, TrunkMovement, GatewayImpact, GatewayMovement, ServiceImpact } from "../types/index.js";
 import { getAllSubnets } from "../db/queries.js";
 import { ipToLong, parseSubnets, matchSubnetFast, type SubnetRow } from "../utils/subnet.js";
 import { config } from "../config.js";
+import { SERVICE_DISPLAY_NAMES } from "../services/serviceability.service.js";
 
 export function simulateFailover(disabledServerIds: number[]): SimulationResult {
   const db = getDb();
@@ -169,6 +170,9 @@ export function simulateFailover(disabledServerIds: number[]): SimulationResult 
     ? simulateGatewayFailover(db, disabledSet, cmgMembersMap)
     : undefined;
 
+  // Simulate service impact
+  const serviceImpacts = simulateServiceImpact(db, disabledSet);
+
   return {
     totalPhones,
     noImpact: totalNoImpact,
@@ -177,6 +181,7 @@ export function simulateFailover(disabledServerIds: number[]): SimulationResult 
     details,
     trunkImpact,
     gatewayImpact,
+    serviceImpacts: serviceImpacts.length > 0 ? serviceImpacts : undefined,
   };
 }
 
@@ -336,4 +341,57 @@ function simulateGatewayFailover(
   }
 
   return { totalGateways: gateways.length, noImpact, degraded, noService, movements };
+}
+
+function simulateServiceImpact(
+  db: any,
+  disabledSet: Set<number>
+): ServiceImpact[] {
+  // Get all service statuses grouped by service name
+  const statuses = db
+    .prepare(
+      `SELECT ss.service_name, ss.server_id, ss.status
+       FROM service_statuses ss`
+    )
+    .all() as { service_name: string; server_id: number; status: string }[];
+
+  if (statuses.length === 0) return [];
+
+  // Group by service
+  const serviceMap = new Map<string, { serverId: number; isActive: boolean }[]>();
+  for (const s of statuses) {
+    if (!serviceMap.has(s.service_name)) serviceMap.set(s.service_name, []);
+    serviceMap.get(s.service_name)!.push({
+      serverId: s.server_id,
+      isActive: s.status === "Started" || s.status === "started",
+    });
+  }
+
+  const impacts: ServiceImpact[] = [];
+
+  for (const [serviceName, servers] of serviceMap) {
+    const totalServers = servers.length;
+    const currentActive = servers.filter((s) => s.isActive).length;
+    const newActive = servers.filter((s) => s.isActive && !disabledSet.has(s.serverId)).length;
+
+    let impact: "no_change" | "degraded" | "outage";
+    if (newActive === currentActive) {
+      impact = "no_change";
+    } else if (newActive === 0) {
+      impact = "outage";
+    } else {
+      impact = "degraded";
+    }
+
+    impacts.push({
+      serviceName,
+      displayName: SERVICE_DISPLAY_NAMES[serviceName] || serviceName,
+      currentActive,
+      newActive,
+      totalServers,
+      impact,
+    });
+  }
+
+  return impacts;
 }

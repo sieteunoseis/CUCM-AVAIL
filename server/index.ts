@@ -20,6 +20,7 @@ import plannerRouter from "./routes/planner.routes.js";
 import trunksRouter from "./routes/trunks.routes.js";
 import agRouter from "./routes/ag.routes.js";
 import gatewaysRouter from "./routes/gateways.routes.js";
+import servicesRouter from "./routes/services.routes.js";
 import { join, dirname } from "path";
 import { fileURLToPath, URL } from "url";
 import { existsSync } from "fs";
@@ -49,6 +50,7 @@ app.use("/api/devicepools", devicepoolsRouter);
 app.use("/api/planner", plannerRouter);
 app.use("/api/trunks", trunksRouter);
 app.use("/api/ag", agRouter);
+app.use("/api/services", servicesRouter);
 if (config.features.enableGateways) {
   app.use("/api/gateways", gatewaysRouter);
 }

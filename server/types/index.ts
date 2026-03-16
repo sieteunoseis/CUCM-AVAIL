@@ -50,6 +50,15 @@ export interface SimulationRequest {
   disabledServerIds: number[];
 }
 
+export interface ServiceImpact {
+  serviceName: string;
+  displayName: string;
+  currentActive: number;
+  newActive: number;
+  totalServers: number;
+  impact: "no_change" | "degraded" | "outage";
+}
+
 export interface SimulationResult {
   totalPhones: number;
   noImpact: number;
@@ -58,6 +67,7 @@ export interface SimulationResult {
   details: SimulationDetail[];
   trunkImpact?: TrunkImpact;
   gatewayImpact?: GatewayImpact;
+  serviceImpacts?: ServiceImpact[];
 }
 
 export interface SimulationDetail {

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api/client";
-import type { Server, SimulationResult, TrunkImpact, GatewayImpact } from "../api/client";
+import type { Server, SimulationResult, TrunkImpact, GatewayImpact, ServiceImpact } from "../api/client";
 import { AgBadge, useAvailabilityGroups } from "../components/AgBadge";
 
 export default function Simulation() {
@@ -259,6 +259,10 @@ export default function Simulation() {
 
           {result.gatewayImpact && result.gatewayImpact.totalGateways > 0 && (
             <GatewayImpactSection gatewayImpact={result.gatewayImpact} cmgToAg={cmgToAg} />
+          )}
+
+          {result.serviceImpacts && result.serviceImpacts.length > 0 && (
+            <ServiceImpactSection serviceImpacts={result.serviceImpacts} />
           )}
         </>
       )}
@@ -630,6 +634,83 @@ function GatewayImpactSection({ gatewayImpact, cmgToAg }: { gatewayImpact: Gatew
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+function ServiceImpactSection({ serviceImpacts }: { serviceImpacts: ServiceImpact[] }) {
+  const hasImpact = serviceImpacts.some((s) => s.impact !== "no_change");
+  const degradedCount = serviceImpacts.filter((s) => s.impact === "degraded").length;
+  const outageCount = serviceImpacts.filter((s) => s.impact === "outage").length;
+
+  return (
+    <div className={`border bg-noc-surface overflow-hidden ${
+      outageCount > 0 ? "border-noc-red/50" : degradedCount > 0 ? "border-noc-amber/50" : "border-noc-border"
+    }`}>
+      <div className="tmux-title text-noc-cyan flex items-center justify-between">
+        <span>Service Impact ({serviceImpacts.length} services)</span>
+        <div className="flex items-center gap-4 text-xs font-mono normal-case tracking-normal">
+          {outageCount > 0 && (
+            <span className="text-noc-red font-bold">{outageCount} OUTAGE</span>
+          )}
+          {degradedCount > 0 && (
+            <span className="text-noc-amber">{degradedCount} degraded</span>
+          )}
+          {!hasImpact && (
+            <span className="text-noc-green">all ok</span>
+          )}
+        </div>
+      </div>
+
+      <div className="p-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+          {serviceImpacts.map((s) => (
+            <div
+              key={s.serviceName}
+              className={`border p-3 ${
+                s.impact === "outage"
+                  ? "border-noc-red/40 bg-noc-red/5"
+                  : s.impact === "degraded"
+                    ? "border-noc-amber/40 bg-noc-amber/5"
+                    : "border-noc-border bg-noc-bg"
+              }`}
+            >
+              <div className="flex items-center justify-between mb-1">
+                <span className="font-mono text-xs font-semibold text-noc-text-bright">
+                  {s.displayName}
+                </span>
+                <span className={`font-mono text-[10px] font-bold uppercase tracking-widest px-1.5 py-0.5 ${
+                  s.impact === "outage"
+                    ? "bg-noc-red/20 text-noc-red"
+                    : s.impact === "degraded"
+                      ? "bg-noc-amber/20 text-noc-amber"
+                      : "text-noc-green"
+                }`}>
+                  {s.impact === "outage" ? "OUTAGE" : s.impact === "degraded" ? "DEGRADED" : "OK"}
+                </span>
+              </div>
+              <div className="font-mono text-[10px] text-noc-text-dim">
+                {s.currentActive}/{s.totalServers} active → {s.newActive}/{s.totalServers}
+              </div>
+              {/* Mini bar */}
+              <div className="flex gap-0.5 mt-2">
+                {Array.from({ length: s.totalServers }).map((_, i) => (
+                  <div
+                    key={i}
+                    className={`h-1.5 flex-1 ${
+                      i < s.newActive
+                        ? "bg-noc-green"
+                        : i < s.currentActive
+                          ? "bg-noc-red/60"
+                          : "bg-noc-text-dim/20"
+                    }`}
+                  />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </div>
   );
 }

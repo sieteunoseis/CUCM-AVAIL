@@ -1,14 +1,34 @@
 import { config } from "../config.js";
 
-const SOAP_ENVELOPE = `<?xml version="1.0" encoding="UTF-8"?>
+// Customer-facing services we track
+export const TRACKED_SERVICES = [
+  "Cisco CallManager",
+  "Cisco Extension Mobility",
+  "Cisco CTIManager",
+  "Cisco Tftp",
+  "Cisco IP Voice Media Streaming App",  // MOH + MTP + Conference Bridge
+];
+
+// Friendly display names
+export const SERVICE_DISPLAY_NAMES: Record<string, string> = {
+  "Cisco CallManager": "CallManager",
+  "Cisco Extension Mobility": "Extension Mobility",
+  "Cisco CTIManager": "CTI Manager",
+  "Cisco Tftp": "TFTP",
+  "Cisco IP Voice Media Streaming App": "Media Resources",
+};
+
+function buildSoapEnvelope(serviceName: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
 <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
                   xmlns:soap="http://schemas.cisco.com/ast/soap">
   <soapenv:Body>
     <soap:soapGetServiceStatus>
-      <soap:ServiceStatus>Cisco CallManager</soap:ServiceStatus>
+      <soap:ServiceStatus>${serviceName}</soap:ServiceStatus>
     </soap:soapGetServiceStatus>
   </soapenv:Body>
 </soapenv:Envelope>`;
+}
 
 export interface ServiceStatus {
   serverHostname: string;
@@ -17,8 +37,9 @@ export interface ServiceStatus {
   reasonCode: string;
 }
 
-export async function getCallManagerServiceStatus(
-  hostname: string
+async function getServiceStatus(
+  hostname: string,
+  serviceName: string
 ): Promise<ServiceStatus> {
   const url = `https://${hostname}:8443/controlcenterservice2/services/ControlCenterServices`;
   const auth = Buffer.from(
@@ -32,12 +53,11 @@ export async function getCallManagerServiceStatus(
       Authorization: `Basic ${auth}`,
       SOAPAction: `"ControlCenterServices#soapGetServiceStatus"`,
     },
-    body: SOAP_ENVELOPE,
+    body: buildSoapEnvelope(serviceName),
   });
 
   const text = await response.text();
 
-  // Response uses ns1: prefix — match ServiceStatus within ServiceInfoList items
   const serviceStatusMatch = text.match(
     /<ns1:ServiceStatus>(.*?)<\/ns1:ServiceStatus>/
   );
@@ -50,10 +70,16 @@ export async function getCallManagerServiceStatus(
 
   return {
     serverHostname: hostname,
-    serviceName: "Cisco CallManager",
+    serviceName,
     status: statusValue,
     reasonCode,
   };
+}
+
+export async function getCallManagerServiceStatus(
+  hostname: string
+): Promise<ServiceStatus> {
+  return getServiceStatus(hostname, "Cisco CallManager");
 }
 
 export async function checkAllServersServiceStatus(
@@ -74,4 +100,37 @@ export async function checkAllServersServiceStatus(
       reasonCode: (r.reason as Error).message,
     };
   });
+}
+
+/**
+ * Check all tracked services on all servers.
+ * Returns one ServiceStatus per (server, service) pair.
+ */
+export async function checkAllServicesOnAllServers(
+  hostnames: string[]
+): Promise<ServiceStatus[]> {
+  const allResults: ServiceStatus[] = [];
+
+  // Query each service across all servers in parallel
+  for (const serviceName of TRACKED_SERVICES) {
+    const results = await Promise.allSettled(
+      hostnames.map((h) => getServiceStatus(h, serviceName))
+    );
+
+    for (let i = 0; i < results.length; i++) {
+      const r = results[i];
+      if (r.status === "fulfilled") {
+        allResults.push(r.value);
+      } else {
+        allResults.push({
+          serverHostname: hostnames[i],
+          serviceName,
+          status: "Error",
+          reasonCode: (r.reason as Error).message,
+        });
+      }
+    }
+  }
+
+  return allResults;
 }

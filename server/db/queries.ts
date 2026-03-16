@@ -563,6 +563,60 @@ export function getGatewaySummary() {
     .all();
 }
 
+// --- Services ---
+
+export function upsertServiceStatus(
+  serverId: number,
+  serviceName: string,
+  status: string,
+  reasonCode: string
+) {
+  return getDb()
+    .prepare(
+      `INSERT INTO service_statuses (server_id, service_name, status, reason_code, checked_at)
+       VALUES (?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(server_id, service_name) DO UPDATE SET
+         status = ?,
+         reason_code = ?,
+         checked_at = datetime('now')`
+    )
+    .run(serverId, serviceName, status, reasonCode, status, reasonCode);
+}
+
+export function getAllServiceStatuses() {
+  return getDb()
+    .prepare(
+      `SELECT ss.*, s.name as server_name, s.hostname as server_hostname
+       FROM service_statuses ss
+       JOIN servers s ON ss.server_id = s.id
+       ORDER BY ss.service_name, s.name`
+    )
+    .all();
+}
+
+export function getServiceStatusesByServer(serverId: number) {
+  return getDb()
+    .prepare(
+      `SELECT * FROM service_statuses WHERE server_id = ? ORDER BY service_name`
+    )
+    .all(serverId);
+}
+
+export function getServiceSummary() {
+  return getDb()
+    .prepare(
+      `SELECT ss.service_name,
+              COUNT(*) as total_servers,
+              SUM(CASE WHEN ss.status IN ('Started', 'started') THEN 1 ELSE 0 END) as active_count,
+              SUM(CASE WHEN ss.status IN ('Stopped', 'stopped') THEN 1 ELSE 0 END) as stopped_count,
+              SUM(CASE WHEN ss.status NOT IN ('Started', 'started', 'Stopped', 'stopped') THEN 1 ELSE 0 END) as error_count
+       FROM service_statuses ss
+       GROUP BY ss.service_name
+       ORDER BY ss.service_name`
+    )
+    .all();
+}
+
 // --- Subnets ---
 
 export function getAllSubnets() {
