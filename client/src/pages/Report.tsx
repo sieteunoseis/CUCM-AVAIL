@@ -121,7 +121,10 @@ export default function Report() {
                 }`}
               >
                 <span className="font-mono text-[10px] text-noc-text truncate">{s.server_name.split(".")[0]}</span>
-                <span className="font-mono text-[10px] text-noc-amber font-semibold">{s.registered.toLocaleString()}</span>
+                <span className="flex items-center gap-2">
+                  <span className="font-mono text-[10px] text-noc-green">{s.active_24h > 0 ? `${Math.round((s.active_24h / s.registered) * 100)}%` : "—"}</span>
+                  <span className="font-mono text-[10px] text-noc-amber font-semibold">{s.registered.toLocaleString()}</span>
+                </span>
               </button>
             ))}
           </div>

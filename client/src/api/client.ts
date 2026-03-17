@@ -418,7 +418,7 @@ export interface ReportSummary {
   active24h: number;
   active7d: number;
   active30d: number;
-  serverBreakdown: { server_name: string; total: number; registered: number; unregistered: number }[];
+  serverBreakdown: { server_name: string; total: number; registered: number; unregistered: number; active_24h: number; active_7d: number; active_30d: number }[];
   protocols: { protocol: string; count: number }[];
   firmware: { firmware: string; count: number }[];
   models: { model: string; count: number }[];

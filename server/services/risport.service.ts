@@ -136,7 +136,7 @@ export async function pollRegistrations(): Promise<RisDeviceResult[]> {
           d.IPAddress?.item?.IP || d.IPAddress?.IP || d.IpAddress || "",
         status: d.Status || d.status || "Unknown",
         statusReason: d.StatusReason || d.statusReason || "",
-        dirNumber: (d.DirNumber || d.dirNumber || "").replace(/-(?:Registered|UnRegistered|Rejected|PartiallyRegistered|Unknown)$/, ""),
+        dirNumber: (d.DirNumber || d.dirNumber || "").replace(/-(?:Registered|UnRegistered|Rejected|PartiallyRegistered|Unknown)/g, ""),
         protocol: d.Protocol || d.protocol || "",
         activeLoadId: d.ActiveLoadID || d.activeLoadID || d.ActiveLoadId || "",
         timeStamp: (() => {

@@ -96,14 +96,18 @@ router.get("/summary", (_req, res) => {
      WHERE last_active != '' AND last_active > datetime('now', '-30 days')`
   ).get() as any).c;
 
-  // Per-server breakdown
+  // Per-server breakdown with active phone counts
   const serverBreakdown = db.prepare(
     `SELECT s.name as server_name,
             COUNT(*) as total,
             SUM(CASE WHEN lr.status IN ('Registered', 'registered') THEN 1 ELSE 0 END) as registered,
-            SUM(CASE WHEN lr.status NOT IN ('Registered', 'registered') THEN 1 ELSE 0 END) as unregistered
+            SUM(CASE WHEN lr.status NOT IN ('Registered', 'registered') THEN 1 ELSE 0 END) as unregistered,
+            SUM(CASE WHEN p.last_active != '' AND p.last_active > datetime('now', '-1 day') THEN 1 ELSE 0 END) as active_24h,
+            SUM(CASE WHEN p.last_active != '' AND p.last_active > datetime('now', '-7 days') THEN 1 ELSE 0 END) as active_7d,
+            SUM(CASE WHEN p.last_active != '' AND p.last_active > datetime('now', '-30 days') THEN 1 ELSE 0 END) as active_30d
      FROM latest_registrations lr
      JOIN servers s ON lr.registered_server_id = s.id
+     JOIN phones p ON lr.phone_id = p.id
      GROUP BY s.name
      ORDER BY total DESC`
   ).all();
