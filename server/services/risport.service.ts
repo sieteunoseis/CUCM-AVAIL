@@ -2,8 +2,6 @@ import risPortService from "cisco-risport";
 import { config } from "../config.js";
 import { getDb } from "../db/database.js";
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
 let service: any;
 type LogCallback = (message: string) => void;
 let onRisLog: LogCallback | null = null;
@@ -60,6 +58,78 @@ function getTrunkNamesFromDb(): string[] {
   return rows.map((r) => r.name);
 }
 
+function getGatewayNamesFromDb(): string[] {
+  const db = getDb();
+  const rows = db
+    .prepare("SELECT name FROM gateways")
+    .all() as { name: string }[];
+  return rows.map((r) => r.name);
+}
+
+function parseDevice(d: any) {
+  return {
+    name: d.Name || d.name || "",
+    ipAddress:
+      d.IPAddress?.item?.IP || d.IPAddress?.IP || d.IpAddress || "",
+    status: d.Status || d.status || "Unknown",
+    statusReason: d.StatusReason || d.statusReason || "",
+    dirNumber: (d.DirNumber || d.dirNumber || "").replace(/-(?:Registered|UnRegistered|Rejected|PartiallyRegistered|Unknown)/g, ""),
+    protocol: d.Protocol || d.protocol || "",
+    activeLoadId: d.ActiveLoadID || d.activeLoadID || d.ActiveLoadId || "",
+    timeStamp: (() => {
+      const ts = d.TimeStamp || d.timeStamp || "";
+      if (!ts) return "";
+      const num = parseInt(ts, 10);
+      if (!isNaN(num) && num > 1000000000) return new Date(num * 1000).toISOString();
+      return ts;
+    })(),
+    lastActive: (() => {
+      const ts = d.LastActive || d.lastActive || "";
+      if (!ts) return "";
+      const num = parseInt(ts, 10);
+      if (!isNaN(num) && num > 1000000000) return new Date(num * 1000).toISOString();
+      return ts;
+    })(),
+    loginUserId: d.LoginUserId || d.loginUserId || "",
+  };
+}
+
+function parseDeviceBasic(d: any) {
+  return {
+    name: d.Name || d.name || "",
+    ipAddress:
+      d.IPAddress?.item?.IP || d.IPAddress?.IP || d.IpAddress || "",
+    status: d.Status || d.status || "Unknown",
+    statusReason: "",
+    dirNumber: "",
+    protocol: "",
+    activeLoadId: "",
+    timeStamp: "",
+    lastActive: "",
+    loginUserId: "",
+  };
+}
+
+function mergeNodeResults(allResults: RisDeviceResult[], nodes: any[], parseFn: (d: any) => any) {
+  for (const node of nodes) {
+    const devices = node.CmDevices?.item
+      ? Array.isArray(node.CmDevices.item)
+        ? node.CmDevices.item
+        : [node.CmDevices.item]
+      : [];
+
+    const nodeName = node.Name || node.name || "";
+    const parsed = devices.map(parseFn);
+    const existing = allResults.find((r) => r.nodeName === nodeName);
+
+    if (existing) {
+      existing.devices.push(...parsed);
+    } else {
+      allResults.push({ nodeName, devices: parsed });
+    }
+  }
+}
+
 export async function pollRegistrations(): Promise<RisDeviceResult[]> {
   const svc = getService();
   const phoneNames = getPhoneNamesFromDb();
@@ -69,113 +139,38 @@ export async function pollRegistrations(): Promise<RisDeviceResult[]> {
     return [];
   }
 
-  // Chunk into batches of 1000, spaced out to be gentle on CUCM
-  const allResults: RisDeviceResult[] = [];
-  const batchSize = 1000;
-  const totalBatches = Math.ceil(phoneNames.length / batchSize);
+  const totalBatches = Math.ceil(phoneNames.length / 1000);
+  emitLog(`[RISPort] ${phoneNames.length} phones, ${totalBatches} batches, 5s between batches`);
 
-  // CUCM allows 15 RISPort requests/min — use 5s between batches to stay under limit
-  const delayBetweenBatches = 5000;
-
-  emitLog(`[RISPort] ${phoneNames.length} phones, ${totalBatches} batches, ${Math.round(delayBetweenBatches / 1000)}s between batches`);
-
-  for (let i = 0; i < phoneNames.length; i += batchSize) {
-    const batch = phoneNames.slice(i, i + batchSize);
-    const batchNum = Math.floor(i / batchSize) + 1;
-    emitLog(`[RISPort] Batch ${batchNum}/${totalBatches} (${batch.length} devices)`);
-
-    // Wait between batches (not before the first one)
-    if (i > 0 && delayBetweenBatches > 0) {
-      await sleep(delayBetweenBatches);
-    }
-
-    let result: any;
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        result = await svc.selectCmDevice(
-          "SelectCmDeviceExt",
-          batch.length,
-          "Phone",
-          255,
-          "Any",
-          "",
-          "Name",
-          batch,
-          "Any",
-          "Any"
-        );
-        break;
-      } catch (err: any) {
-        const isRateLimit = err?.message?.includes("Exceeded allowed rate") || err?.status === 429;
-        if (isRateLimit && attempt < 2) {
-          emitLog(`[RISPort] Rate limited on batch ${batchNum}, waiting 30s before retry...`);
-          await sleep(30000);
-        } else {
-          throw err;
+  const result = await svc.selectCmDeviceBatched(
+    {
+      action: "SelectCmDeviceExt",
+      maxReturned: 1000,
+      deviceClass: "Phone",
+      model: 255,
+      status: "Any",
+      selectBy: "Name",
+      protocol: "Any",
+      downloadStatus: "Any",
+    },
+    {},
+    phoneNames,
+    {
+      chunkSize: 1000,
+      delayMs: 5000,
+      onProgress: (batch: number, total: number) => {
+        if (batch < total) {
+          emitLog(`[RISPort] Batch ${batch + 1}/${total} (${Math.min((batch + 1) * 1000, phoneNames.length)} devices)`);
         }
-      }
+      },
     }
+  );
 
-    const nodes = Array.isArray(result.results)
-      ? result.results
-      : result.results
-        ? [result.results]
-        : [];
-
-    for (const node of nodes) {
-      const devices = node.CmDevices?.item
-        ? Array.isArray(node.CmDevices.item)
-          ? node.CmDevices.item
-          : [node.CmDevices.item]
-        : [];
-
-      const existing = allResults.find((r) => r.nodeName === (node.Name || node.name || ""));
-      const parsed = devices.map((d: any) => ({
-        name: d.Name || d.name || "",
-        ipAddress:
-          d.IPAddress?.item?.IP || d.IPAddress?.IP || d.IpAddress || "",
-        status: d.Status || d.status || "Unknown",
-        statusReason: d.StatusReason || d.statusReason || "",
-        dirNumber: (d.DirNumber || d.dirNumber || "").replace(/-(?:Registered|UnRegistered|Rejected|PartiallyRegistered|Unknown)/g, ""),
-        protocol: d.Protocol || d.protocol || "",
-        activeLoadId: d.ActiveLoadID || d.activeLoadID || d.ActiveLoadId || "",
-        timeStamp: (() => {
-          const ts = d.TimeStamp || d.timeStamp || "";
-          if (!ts) return "";
-          const num = parseInt(ts, 10);
-          if (!isNaN(num) && num > 1000000000) return new Date(num * 1000).toISOString();
-          return ts;
-        })(),
-        lastActive: (() => {
-          const ts = d.LastActive || d.lastActive || "";
-          if (!ts) return "";
-          const num = parseInt(ts, 10);
-          if (!isNaN(num) && num > 1000000000) return new Date(num * 1000).toISOString();
-          return ts;
-        })(),
-        loginUserId: d.LoginUserId || d.loginUserId || "",
-      }));
-
-      if (existing) {
-        existing.devices.push(...parsed);
-      } else {
-        allResults.push({
-          nodeName: node.Name || node.name || "",
-          devices: parsed,
-        });
-      }
-    }
-  }
+  const allResults: RisDeviceResult[] = [];
+  const nodes = Array.isArray(result.results) ? result.results : result.results ? [result.results] : [];
+  mergeNodeResults(allResults, nodes, parseDevice);
 
   return allResults;
-}
-
-function getGatewayNamesFromDb(): string[] {
-  const db = getDb();
-  const rows = db
-    .prepare("SELECT name FROM gateways")
-    .all() as { name: string }[];
-  return rows.map((r) => r.name);
 }
 
 export async function pollGatewayRegistrations(): Promise<RisDeviceResult[]> {
@@ -188,66 +183,33 @@ export async function pollGatewayRegistrations(): Promise<RisDeviceResult[]> {
 
   emitLog(`[RISPort] Polling ${gatewayNames.length} MGCP gateways`);
 
+  const result = await svc.selectCmDeviceBatched(
+    {
+      action: "SelectCmDeviceExt",
+      maxReturned: 1000,
+      deviceClass: "Gateway",
+      model: 255,
+      status: "Any",
+      selectBy: "Name",
+      protocol: "Any",
+      downloadStatus: "Any",
+    },
+    {},
+    gatewayNames,
+    {
+      chunkSize: 1000,
+      delayMs: 5000,
+      onProgress: (batch: number, total: number) => {
+        if (batch < total && total > 1) {
+          emitLog(`[RISPort] Gateway batch ${batch + 1}/${total} (${Math.min((batch + 1) * 1000, gatewayNames.length)} devices)`);
+        }
+      },
+    }
+  );
+
   const allResults: RisDeviceResult[] = [];
-  const batchSize = 1000;
-  const totalBatches = Math.ceil(gatewayNames.length / batchSize);
-
-  for (let i = 0; i < gatewayNames.length; i += batchSize) {
-    const batch = gatewayNames.slice(i, i + batchSize);
-    const batchNum = Math.floor(i / batchSize) + 1;
-
-    if (totalBatches > 1) {
-      emitLog(`[RISPort] Gateway batch ${batchNum}/${totalBatches} (${batch.length} devices)`);
-    }
-
-    if (i > 0) {
-      await sleep(5000);
-    }
-
-    const result = await svc.selectCmDevice(
-      "SelectCmDeviceExt",
-      batch.length,
-      "Gateway",
-      255,
-      "Any",
-      "",
-      "Name",
-      batch,
-      "Any",
-      "Any"
-    );
-
-    const nodes = Array.isArray(result.results)
-      ? result.results
-      : result.results
-        ? [result.results]
-        : [];
-
-    for (const node of nodes) {
-      const devices = node.CmDevices?.item
-        ? Array.isArray(node.CmDevices.item)
-          ? node.CmDevices.item
-          : [node.CmDevices.item]
-        : [];
-
-      const parsed = devices.map((d: any) => ({
-        name: d.Name || d.name || "",
-        ipAddress:
-          d.IPAddress?.item?.IP || d.IPAddress?.IP || d.IpAddress || "",
-        status: d.Status || d.status || "Unknown",
-      }));
-
-      const existing = allResults.find((r) => r.nodeName === (node.Name || node.name || ""));
-      if (existing) {
-        existing.devices.push(...parsed);
-      } else {
-        allResults.push({
-          nodeName: node.Name || node.name || "",
-          devices: parsed,
-        });
-      }
-    }
-  }
+  const nodes = Array.isArray(result.results) ? result.results : result.results ? [result.results] : [];
+  mergeNodeResults(allResults, nodes, parseDeviceBasic);
 
   return allResults;
 }
@@ -262,51 +224,21 @@ export async function pollTrunkRegistrations(): Promise<RisDeviceResult[]> {
 
   emitLog(`[RISPort] Polling ${trunkNames.length} SIP trunks`);
 
-  // Trunks are usually few — single batch is fine
-  const result = await svc.selectCmDevice(
-    "SelectCmDeviceExt",
-    trunkNames.length,
-    "SIPTrunk",
-    255,
-    "Any",
-    "",
-    "Name",
-    trunkNames,
-    "Any",
-    "Any"
-  );
+  const result = await svc.selectCmDevice({
+    action: "SelectCmDeviceExt",
+    maxReturned: trunkNames.length,
+    deviceClass: "SIPTrunk",
+    model: 255,
+    status: "Any",
+    selectBy: "Name",
+    selectItems: trunkNames,
+    protocol: "Any",
+    downloadStatus: "Any",
+  });
 
   const allResults: RisDeviceResult[] = [];
-  const nodes = Array.isArray(result.results)
-    ? result.results
-    : result.results
-      ? [result.results]
-      : [];
-
-  for (const node of nodes) {
-    const devices = node.CmDevices?.item
-      ? Array.isArray(node.CmDevices.item)
-        ? node.CmDevices.item
-        : [node.CmDevices.item]
-      : [];
-
-    const parsed = devices.map((d: any) => ({
-      name: d.Name || d.name || "",
-      ipAddress:
-        d.IPAddress?.item?.IP || d.IPAddress?.IP || d.IpAddress || "",
-      status: d.Status || d.status || "Unknown",
-    }));
-
-    const existing = allResults.find((r) => r.nodeName === (node.Name || node.name || ""));
-    if (existing) {
-      existing.devices.push(...parsed);
-    } else {
-      allResults.push({
-        nodeName: node.Name || node.name || "",
-        devices: parsed,
-      });
-    }
-  }
+  const nodes = Array.isArray(result.results) ? result.results : result.results ? [result.results] : [];
+  mergeNodeResults(allResults, nodes, parseDeviceBasic);
 
   return allResults;
 }

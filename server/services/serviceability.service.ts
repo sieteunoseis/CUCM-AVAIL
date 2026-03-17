@@ -1,3 +1,4 @@
+import controlCenterService from "cisco-serviceability";
 import { config } from "../config.js";
 
 // Friendly display names for known services
@@ -35,29 +36,6 @@ export const SERVICE_DISPLAY_NAMES: Record<string, string> = {
   "Platform Administrative Web Service": "Platform Admin",
 };
 
-// SOAP envelope that queries ALL services (empty ServiceStatus tag)
-const SOAP_ALL_SERVICES = `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                  xmlns:soap="http://schemas.cisco.com/ast/soap">
-  <soapenv:Body>
-    <soap:soapGetServiceStatus>
-      <soap:ServiceStatus></soap:ServiceStatus>
-    </soap:soapGetServiceStatus>
-  </soapenv:Body>
-</soapenv:Envelope>`;
-
-function buildSoapEnvelope(serviceName: string): string {
-  return `<?xml version="1.0" encoding="UTF-8"?>
-<soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/"
-                  xmlns:soap="http://schemas.cisco.com/ast/soap">
-  <soapenv:Body>
-    <soap:soapGetServiceStatus>
-      <soap:ServiceStatus>${serviceName}</soap:ServiceStatus>
-    </soap:soapGetServiceStatus>
-  </soapenv:Body>
-</soapenv:Envelope>`;
-}
-
 export interface ServiceStatus {
   serverHostname: string;
   serviceName: string;
@@ -65,79 +43,50 @@ export interface ServiceStatus {
   reasonCode: string;
 }
 
-async function queryServiceability(
-  hostname: string,
-  soapBody: string
-): Promise<string> {
-  const url = `https://${hostname}:8443/controlcenterservice2/services/ControlCenterServices`;
-  const auth = Buffer.from(
-    `${config.cucm.username}:${config.cucm.password}`
-  ).toString("base64");
-
-  const response = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "text/xml; charset=utf-8",
-      Authorization: `Basic ${auth}`,
-      SOAPAction: `"ControlCenterServices#soapGetServiceStatus"`,
-    },
-    body: soapBody,
-  });
-
-  return response.text();
+function getService(hostname: string) {
+  return new controlCenterService(
+    hostname,
+    config.cucm.username,
+    config.cucm.password
+  );
 }
 
-/**
- * Parse all ServiceInfoList items from the SOAP response.
- * Each item has ServiceName, ServiceStatus, and ReasonCode.
- */
-function parseAllServices(hostname: string, xml: string): ServiceStatus[] {
-  const results: ServiceStatus[] = [];
+function parseServiceItems(hostname: string, results: any): ServiceStatus[] {
+  if (!results) return [];
 
-  // Match each ServiceInfoList item
-  const itemRegex = /<ns1:item>([\s\S]*?)<\/ns1:item>/g;
-  let match;
+  const items = results.ServiceInfoList?.item;
+  if (!items) return [];
 
-  while ((match = itemRegex.exec(xml)) !== null) {
-    const item = match[1];
-    const nameMatch = item.match(/<ns1:ServiceName>(.*?)<\/ns1:ServiceName>/);
-    const statusMatch = item.match(/<ns1:ServiceStatus>(.*?)<\/ns1:ServiceStatus>/);
-    const reasonMatch = item.match(/<ns1:ReasonCode>(.*?)<\/ns1:ReasonCode>/);
-
-    if (nameMatch) {
-      results.push({
-        serverHostname: hostname,
-        serviceName: nameMatch[1],
-        status: statusMatch ? statusMatch[1] : "Unknown",
-        reasonCode: reasonMatch ? reasonMatch[1] : "",
-      });
-    }
-  }
-
-  return results;
+  const list = Array.isArray(items) ? items : [items];
+  return list.map((item: any) => ({
+    serverHostname: hostname,
+    serviceName: item.ServiceName || "",
+    status: item.ServiceStatus || "Unknown",
+    reasonCode: item.ReasonCode || "",
+  }));
 }
 
 export async function getCallManagerServiceStatus(
   hostname: string
 ): Promise<ServiceStatus> {
-  const xml = await queryServiceability(hostname, buildSoapEnvelope("Cisco CallManager"));
-
-  const serviceStatusMatch = xml.match(
-    /<ns1:ServiceStatus>(.*?)<\/ns1:ServiceStatus>/
-  );
-  const statusValue = serviceStatusMatch ? serviceStatusMatch[1] : "Unknown";
-
-  const reasonCodeMatch = xml.match(
-    /<ns1:ReasonCode>(.*?)<\/ns1:ReasonCode>/
-  );
-  const reasonCode = reasonCodeMatch ? reasonCodeMatch[1] : "";
-
-  return {
-    serverHostname: hostname,
-    serviceName: "Cisco CallManager",
-    status: statusValue,
-    reasonCode,
-  };
+  try {
+    const svc = getService(hostname);
+    const { results } = await svc.getServiceStatus("Cisco CallManager");
+    const statuses = parseServiceItems(hostname, results);
+    return statuses[0] || {
+      serverHostname: hostname,
+      serviceName: "Cisco CallManager",
+      status: "Unknown",
+      reasonCode: "",
+    };
+  } catch (err) {
+    return {
+      serverHostname: hostname,
+      serviceName: "Cisco CallManager",
+      status: "Error",
+      reasonCode: (err as Error).message,
+    };
+  }
 }
 
 export async function checkAllServersServiceStatus(
@@ -161,7 +110,7 @@ export async function checkAllServersServiceStatus(
 }
 
 /**
- * Query ALL services on ALL servers. One SOAP call per server returns
+ * Query ALL services on ALL servers. One call per server returns
  * every service and its status.
  */
 export async function checkAllServicesOnAllServers(
@@ -171,8 +120,9 @@ export async function checkAllServicesOnAllServers(
 
   const results = await Promise.allSettled(
     hostnames.map(async (hostname) => {
-      const xml = await queryServiceability(hostname, SOAP_ALL_SERVICES);
-      return parseAllServices(hostname, xml);
+      const svc = getService(hostname);
+      const { results } = await svc.getServiceStatus();
+      return parseServiceItems(hostname, results);
     })
   );
 
@@ -181,7 +131,6 @@ export async function checkAllServicesOnAllServers(
     if (r.status === "fulfilled") {
       allResults.push(...r.value);
     } else {
-      // If we can't reach a server, record an error for it
       allResults.push({
         serverHostname: hostnames[i],
         serviceName: "ALL",
