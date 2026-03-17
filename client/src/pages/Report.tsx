@@ -274,7 +274,7 @@ export default function Report() {
                       case "firmware": return r.active_load_id || "";
                       case "user": return r.login_user_id || "";
                       case "seen": return r.last_seen_at || "";
-                      case "active": return r.last_active_at || "";
+                      case "active": return r.last_active || "";
                       case "status": return r.status || "";
                     }
                   }).slice(0, 500).map((r, i) => (
@@ -305,9 +305,9 @@ export default function Report() {
                           return isNaN(d.getTime()) ? raw : d.toLocaleString();
                         })() : "—"}
                       </td>
-                      <td className="px-4 py-2 text-noc-text-dim truncate" title={r.last_active_at}>
-                        {r.last_active_at ? (() => {
-                          const raw = r.last_active_at;
+                      <td className="px-4 py-2 text-noc-text-dim truncate" title={r.last_active}>
+                        {r.last_active ? (() => {
+                          const raw = r.last_active;
                           const num = parseInt(raw, 10);
                           const d = !isNaN(num) && num > 1000000000 && String(num) === raw
                             ? new Date(num * 1000)

@@ -175,6 +175,40 @@ export async function getAllGatewaysSql(): Promise<
   }));
 }
 
+export async function getRegistrationDynamic(): Promise<
+  {
+    name: string;
+    lastKnownIpAddress: string;
+    lastKnownUcm: string;
+    lastSeen: string;
+    lastActive: string;
+  }[]
+> {
+  const svc = getService();
+  const result = await svc.executeOperation("executeSQLQuery", {
+    sql: `SELECT d.name, rd.lastknownipaddress, rd.lastknownucm, rd.lastseen, rd.lastactive
+          FROM device d
+          LEFT JOIN registrationdynamic rd ON rd.fkdevice = d.pkid
+          WHERE d.tkclass IN (1, 254)`,
+  });
+
+  if (!result) return [];
+
+  const rows = Array.isArray(result.row)
+    ? result.row
+    : result.row
+      ? [result.row]
+      : [];
+
+  return rows.map((r: any) => ({
+    name: r.name || "",
+    lastKnownIpAddress: r.lastknownipaddress || "",
+    lastKnownUcm: r.lastknownucm || "",
+    lastSeen: r.lastseen || "",
+    lastActive: r.lastactive || "",
+  }));
+}
+
 export async function getAllPhonesSql(): Promise<
   {
     name: string;

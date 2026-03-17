@@ -5,6 +5,7 @@ import {
   getAllPhonesSql,
   getAllSipTrunksSql,
   getAllGatewaysSql,
+  getRegistrationDynamic,
 } from "./axl.service.js";
 import {
   upsertServer,
@@ -17,6 +18,7 @@ import {
   getServerByName,
   upsertServiceStatus,
   updateServerServiceStatus,
+  updatePhoneRegistrationDynamic,
 } from "../db/queries.js";
 import { config } from "../config.js";
 import { checkAllServicesOnAllServers } from "./serviceability.service.js";
@@ -85,6 +87,31 @@ export async function syncAll() {
     }
   }
   console.log(`[Sync] Synced ${phoneCount} phones`);
+
+  // 4b. Sync registrationdynamic (lastactive, lastseen, lastknownip, lastknownucm)
+  try {
+    const regDynamic = await getRegistrationDynamic();
+    const epochToIso = (val: string) => {
+      if (!val) return "";
+      const num = parseInt(val, 10);
+      if (!isNaN(num) && num > 1000000000) return new Date(num * 1000).toISOString();
+      return val;
+    };
+    let dynCount = 0;
+    for (const rd of regDynamic) {
+      updatePhoneRegistrationDynamic(
+        rd.name,
+        rd.lastKnownIpAddress,
+        rd.lastKnownUcm,
+        epochToIso(rd.lastSeen),
+        epochToIso(rd.lastActive)
+      );
+      dynCount++;
+    }
+    console.log(`[Sync] Updated ${dynCount} registrationdynamic records`);
+  } catch (e) {
+    console.error("[Sync] registrationdynamic sync failed (non-fatal):", e);
+  }
 
   // 5. Sync SIP Trunks via SQL query
   let trunkCount = 0;

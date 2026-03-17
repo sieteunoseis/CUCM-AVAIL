@@ -401,8 +401,11 @@ export interface PhoneReport {
   protocol: string;
   active_load_id: string;
   last_seen_at: string;
-  last_active_at: string;
   login_user_id: string;
+  last_active: string;
+  cucm_last_seen: string;
+  last_known_ip: string;
+  last_known_ucm: string;
   polled_at: string;
   server_name: string;
 }

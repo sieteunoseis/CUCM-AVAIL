@@ -35,6 +35,10 @@ CREATE TABLE IF NOT EXISTS phones (
   description TEXT DEFAULT '',
   model TEXT DEFAULT '',
   device_pool_id INTEGER REFERENCES device_pools(id),
+  last_known_ip TEXT DEFAULT '',
+  last_known_ucm TEXT DEFAULT '',
+  last_seen TEXT DEFAULT '',
+  last_active TEXT DEFAULT '',
   created_at TEXT DEFAULT (datetime('now'))
 );
 

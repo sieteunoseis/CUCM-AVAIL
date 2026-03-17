@@ -47,7 +47,9 @@ router.get("/phones", (req, res) => {
       `SELECT p.name as phone_name, p.description, p.model,
               dp.name as device_pool_name, cmg.name as cm_group_name,
               lr.status, lr.ip_address, lr.status_reason, lr.dir_number,
-              lr.protocol, lr.active_load_id, lr.last_seen_at, lr.last_active_at, lr.login_user_id,
+              lr.protocol, lr.active_load_id, lr.last_seen_at, lr.login_user_id,
+              p.last_active, p.last_seen as cucm_last_seen,
+              p.last_known_ip, p.last_known_ucm,
               lr.polled_at, s.name as server_name
        FROM phones p
        LEFT JOIN device_pools dp ON p.device_pool_id = dp.id
@@ -78,31 +80,21 @@ router.get("/summary", (_req, res) => {
 
   const neverSeen = total - registered - unregistered;
 
-  // Active in last 24h, 7d, 30d based on last_seen_at
-  // last_seen_at may be Unix epoch (string) or ISO date — handle both
-  const now = Math.floor(Date.now() / 1000);
-  const day = 86400;
-
+  // Active in last 24h, 7d, 30d based on phones.last_active (from registrationdynamic)
   const active24h = (db.prepare(
-    `SELECT COUNT(*) as c FROM latest_registrations
-     WHERE last_seen_at != '' AND (
-       CAST(last_seen_at AS INTEGER) > ? OR last_seen_at > datetime('now', '-1 day')
-     )`
-  ).get(now - day) as any).c;
+    `SELECT COUNT(*) as c FROM phones
+     WHERE last_active != '' AND last_active > datetime('now', '-1 day')`
+  ).get() as any).c;
 
   const active7d = (db.prepare(
-    `SELECT COUNT(*) as c FROM latest_registrations
-     WHERE last_seen_at != '' AND (
-       CAST(last_seen_at AS INTEGER) > ? OR last_seen_at > datetime('now', '-7 days')
-     )`
-  ).get(now - 7 * day) as any).c;
+    `SELECT COUNT(*) as c FROM phones
+     WHERE last_active != '' AND last_active > datetime('now', '-7 days')`
+  ).get() as any).c;
 
   const active30d = (db.prepare(
-    `SELECT COUNT(*) as c FROM latest_registrations
-     WHERE last_seen_at != '' AND (
-       CAST(last_seen_at AS INTEGER) > ? OR last_seen_at > datetime('now', '-30 days')
-     )`
-  ).get(now - 30 * day) as any).c;
+    `SELECT COUNT(*) as c FROM phones
+     WHERE last_active != '' AND last_active > datetime('now', '-30 days')`
+  ).get() as any).c;
 
   // Per-server breakdown
   const serverBreakdown = db.prepare(

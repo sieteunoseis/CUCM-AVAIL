@@ -39,6 +39,10 @@ function migrateSchema() {
     { table: "latest_registrations", column: "last_seen_at", type: "TEXT DEFAULT ''" },
     { table: "latest_registrations", column: "last_active_at", type: "TEXT DEFAULT ''" },
     { table: "latest_registrations", column: "login_user_id", type: "TEXT DEFAULT ''" },
+    { table: "phones", column: "last_known_ip", type: "TEXT DEFAULT ''" },
+    { table: "phones", column: "last_known_ucm", type: "TEXT DEFAULT ''" },
+    { table: "phones", column: "last_seen", type: "TEXT DEFAULT ''" },
+    { table: "phones", column: "last_active", type: "TEXT DEFAULT ''" },
   ];
 
   for (const { table, column, type } of newCols) {

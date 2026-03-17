@@ -142,6 +142,21 @@ export function upsertPhone(phone: {
     .run(phone);
 }
 
+export function updatePhoneRegistrationDynamic(
+  name: string,
+  lastKnownIp: string,
+  lastKnownUcm: string,
+  lastSeen: string,
+  lastActive: string
+) {
+  return getDb()
+    .prepare(
+      `UPDATE phones SET last_known_ip = ?, last_known_ucm = ?, last_seen = ?, last_active = ?
+       WHERE name = ?`
+    )
+    .run(lastKnownIp, lastKnownUcm, lastSeen, lastActive, name);
+}
+
 export function getAllPhones(limit = 100, offset = 0) {
   return getDb()
     .prepare(
