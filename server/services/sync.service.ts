@@ -94,8 +94,9 @@ export async function syncAll() {
     const epochToIso = (val: string) => {
       if (!val) return "";
       const num = parseInt(val, 10);
-      if (!isNaN(num) && num > 1000000000) return new Date(num * 1000).toISOString();
-      return val;
+      // 946684800 = Jan 1 2000 00:00:00 UTC — CUCM's "never" sentinel
+      if (!isNaN(num) && num > 946684800) return new Date(num * 1000).toISOString();
+      return "";
     };
     let dynCount = 0;
     for (const rd of regDynamic) {
