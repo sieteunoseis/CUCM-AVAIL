@@ -303,13 +303,12 @@ export default function Dashboard() {
             </div>
           </div>
         ) : activeServer && (() => {
-          const sbd = reportSummary?.serverBreakdown.find((s) => s.server_name === activeServer.name);
-          const activePct = sbd && sbd.registered > 0 ? Math.round((sbd.active_24h / sbd.registered) * 100) : null;
+          const sbd = reportSummary?.serverBreakdown.find((s) => s.server_name === activeServer.name) || null;
           return (
           <ServerCard
             server={activeServer}
             phoneCount={serverPhoneCounts.get(activeServer.name)}
-            activePercent={activePct}
+            activeStats={sbd}
             groups={groups}
             failover={failover}
           />

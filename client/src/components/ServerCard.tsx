@@ -4,13 +4,13 @@ import StatusIndicator from "./StatusIndicator";
 interface Props {
   server: Server;
   phoneCount?: number;
-  activePercent?: number | null;
+  activeStats?: { active_24h: number; active_7d: number; active_30d: number; registered: number } | null;
   compact?: boolean;
   groups?: CmGroup[];
   failover?: FailoverEntry[];
 }
 
-export default function ServerCard({ server, phoneCount, activePercent, compact, groups, failover }: Props) {
+export default function ServerCard({ server, phoneCount, activeStats, compact, groups, failover }: Props) {
   const active = server.ccm_service_active === 1;
   const isPublisher = server.node_type === "Publisher";
 
@@ -108,15 +108,31 @@ export default function ServerCard({ server, phoneCount, activePercent, compact,
             );
           })()}
         </div>
-        <div className="bg-noc-surface px-4 py-3">
-          <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-1">ACTIVE 24H</div>
-          <div className={`font-mono text-xs font-semibold ${
-            activePercent != null && activePercent > 0 ? "text-noc-green" : "text-noc-text-dim"
-          }`}>
-            {activePercent != null ? `${activePercent}%` : "—"}
-          </div>
-        </div>
       </div>
+      {activeStats && activeStats.registered > 0 && (
+        <div className="grid grid-cols-3 gap-px bg-noc-border mt-px">
+          {([
+            { label: "Active 24h", count: activeStats.active_24h },
+            { label: "Active 7d", count: activeStats.active_7d },
+            { label: "Active 30d", count: activeStats.active_30d },
+          ] as const).map(({ label, count }) => {
+            const pct = Math.round((count / activeStats.registered) * 100);
+            return (
+              <div key={label} className="bg-noc-surface px-4 py-3">
+                <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-1">{label}</div>
+                <div className="flex items-baseline gap-2">
+                  <span className={`font-mono text-xs font-semibold ${pct > 0 ? "text-noc-green" : "text-noc-text-dim"}`}>
+                    {pct}%
+                  </span>
+                  <span className="font-mono text-[10px] text-noc-text-dim">
+                    {count.toLocaleString()} / {activeStats.registered.toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
