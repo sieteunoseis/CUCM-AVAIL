@@ -4,12 +4,13 @@ import StatusIndicator from "./StatusIndicator";
 interface Props {
   server: Server;
   phoneCount?: number;
+  activePercent?: number | null;
   compact?: boolean;
   groups?: CmGroup[];
   failover?: FailoverEntry[];
 }
 
-export default function ServerCard({ server, phoneCount, compact, groups, failover }: Props) {
+export default function ServerCard({ server, phoneCount, activePercent, compact, groups, failover }: Props) {
   const active = server.ccm_service_active === 1;
   const isPublisher = server.node_type === "Publisher";
 
@@ -106,6 +107,14 @@ export default function ServerCard({ server, phoneCount, compact, groups, failov
               </div>
             );
           })()}
+        </div>
+        <div className="bg-noc-surface px-4 py-3">
+          <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-1">ACTIVE 24H</div>
+          <div className={`font-mono text-xs font-semibold ${
+            activePercent != null && activePercent > 0 ? "text-noc-green" : "text-noc-text-dim"
+          }`}>
+            {activePercent != null ? `${activePercent}%` : "—"}
+          </div>
         </div>
       </div>
     </div>

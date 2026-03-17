@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { io } from "socket.io-client";
 import { api } from "../api/client";
-import type { Server, CmGroup, PhonesResponse, PollStatus, RegStat, FailoverEntry, FailoverDetail } from "../api/client";
+import type { Server, CmGroup, PhonesResponse, PollStatus, RegStat, FailoverEntry, FailoverDetail, ReportSummary } from "../api/client";
 import ServerCard from "../components/ServerCard";
 import CmGroupTable from "../components/CmGroupTable";
 import { useSort, ColHeader } from "../components/TableHeader";
@@ -17,18 +17,20 @@ export default function Dashboard() {
   const [syncing, setSyncing] = useState(false);
   const [polling, setPolling] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [reportSummary, setReportSummary] = useState<ReportSummary | null>(null);
   const [activeNodeIdx, setActiveNodeIdx] = useState(-1); // -1 = rollup view
   const { serverToAgs, cmgToAg } = useAvailabilityGroups();
 
   const fetchAll = async () => {
     try {
-      const [s, g, p, ps, rs, fo] = await Promise.all([
+      const [s, g, p, ps, rs, fo, rpt] = await Promise.all([
         api.getServers(),
         api.getCmGroups(),
         api.getPhones(50000, 0),
         api.getPollStatus(),
         api.getRegStats().catch(() => []),
         api.getFailoverStatus().catch(() => []),
+        api.getReportSummary().catch(() => null),
       ]);
       setServers(s);
       setGroups(g);
@@ -36,6 +38,7 @@ export default function Dashboard() {
       setPollStatus(ps);
       setRegStats(rs);
       setFailover(fo);
+      setReportSummary(rpt);
     } catch (e) {
       console.error("Failed to fetch data:", e);
     } finally {
@@ -299,14 +302,19 @@ export default function Dashboard() {
               })}
             </div>
           </div>
-        ) : activeServer && (
+        ) : activeServer && (() => {
+          const sbd = reportSummary?.serverBreakdown.find((s) => s.server_name === activeServer.name);
+          const activePct = sbd && sbd.registered > 0 ? Math.round((sbd.active_24h / sbd.registered) * 100) : null;
+          return (
           <ServerCard
             server={activeServer}
             phoneCount={serverPhoneCounts.get(activeServer.name)}
+            activePercent={activePct}
             groups={groups}
             failover={failover}
           />
-        )}
+          );
+        })()}
       </div>
 
       {/* Failover Status */}
