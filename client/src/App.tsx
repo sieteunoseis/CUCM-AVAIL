@@ -34,6 +34,28 @@ const BASE_PAGES: { key: Page; label: string; feature?: string }[] = [
   { key: "help", label: "help" },
 ];
 
+const PAGE_KEYS: Page[] = BASE_PAGES.map((p) => p.key);
+
+/**
+ * Deep-link support so other tools (e.g. the operator dashboard) can jump
+ * straight into a specific view, e.g.
+ * ?page=simulation&phone=SEP001122334455&servers=brbsub02,brbsub03
+ */
+function readDeepLink() {
+  if (typeof window === "undefined") {
+    return { page: "dashboard" as Page, phone: undefined, serverNames: undefined };
+  }
+  const params = new URLSearchParams(window.location.search);
+  const requestedPage = params.get("page") as Page | null;
+  const page = requestedPage && PAGE_KEYS.includes(requestedPage) ? requestedPage : "dashboard";
+  const phone = params.get("phone") || undefined;
+  const serversParam = params.get("servers");
+  const serverNames = serversParam
+    ? serversParam.split(",").map((s) => s.trim()).filter(Boolean)
+    : undefined;
+  return { page, phone, serverNames };
+}
+
 function useTheme() {
   const [theme, setTheme] = useState<"dark" | "light">(() => {
     if (typeof window !== "undefined") {
@@ -52,7 +74,8 @@ function useTheme() {
 }
 
 function App() {
-  const [page, setPage] = useState<Page>("dashboard");
+  const [deepLink] = useState(readDeepLink);
+  const [page, setPage] = useState<Page>(deepLink.page);
   const [refreshKey, setRefreshKey] = useState(0);
   const [clock, setClock] = useState(new Date());
   const [pollerLog, setPollerLog] = useState<string>("");
@@ -148,7 +171,7 @@ function App() {
         ) : page === "ag" ? (
           <AvailabilityGroups />
         ) : page === "simulation" ? (
-          <Simulation />
+          <Simulation initialPhone={deepLink.phone} initialServerNames={deepLink.serverNames} />
         ) : page === "subnets" ? (
           <Subnets />
         ) : page === "firmware" ? (

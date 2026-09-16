@@ -1,9 +1,53 @@
 import { getDb } from "../db/database.js";
-import type { SimulationResult, SimulationDetail, PhoneMovement, SubnetImpact, TrunkImpact, TrunkMovement, GatewayImpact, GatewayMovement, ServiceImpact } from "../types/index.js";
-import { getAllSubnets, getServiceGroups } from "../db/queries.js";
+import type { SimulationResult, SimulationDetail, PhoneMovement, SubnetImpact, TrunkImpact, TrunkMovement, GatewayImpact, GatewayMovement, ServiceImpact, PhoneImpact } from "../types/index.js";
+import { getAllSubnets, getServiceGroups, getPhoneStatus } from "../db/queries.js";
 import { ipToLong, parseSubnets, matchSubnetFast, type SubnetRow } from "../utils/subnet.js";
 import { config } from "../config.js";
 import { SERVICE_DISPLAY_NAMES } from "../services/serviceability.service.js";
+
+/**
+ * Same re-register/unregister logic as simulateFailover(), scoped to a
+ * single phone. Used for per-phone "what if server X goes down" lookups
+ * (e.g. from an external dashboard card) without scanning the whole
+ * cluster's registrations.
+ */
+export function simulatePhoneImpact(phoneName: string, disabledServerIds: number[]): PhoneImpact | null {
+  const status = getPhoneStatus(phoneName);
+  if (!status) return null;
+
+  const disabledSet = new Set(disabledServerIds);
+  const { phone, members, registration } = status;
+
+  const availableMembers = members.filter((m) => !disabledSet.has(m.server_id));
+  const newPrimaryServerId = availableMembers.length > 0 ? availableMembers[0].server_id : null;
+  const newPrimaryServerName = availableMembers.length > 0 ? availableMembers[0].server_name : null;
+
+  const assumedServerId = members.length > 0 ? members[0].server_id : null;
+  const assumedServerName = members.length > 0 ? members[0].server_name : null;
+
+  const currentServerId = registration ? registration.registered_server_id : assumedServerId;
+  const currentServerName = registration ? registration.server_name : assumedServerName;
+  const isAssumed = !registration;
+
+  let impact: "no_change" | "re_register" | "unregistered";
+  if (newPrimaryServerId === null) {
+    impact = "unregistered";
+  } else if (currentServerId === null || !disabledSet.has(currentServerId)) {
+    impact = "no_change";
+  } else {
+    impact = "re_register";
+  }
+
+  return {
+    phoneName: phone.name,
+    model: phone.model,
+    devicePoolName: phone.device_pool_name,
+    cmGroupName: phone.cm_group_name,
+    currentServer: currentServerName ? (isAssumed ? `${currentServerName} (assumed)` : currentServerName) : null,
+    newServer: impact === "unregistered" ? null : impact === "re_register" ? newPrimaryServerName : currentServerName,
+    impact,
+  };
+}
 
 export function simulateFailover(disabledServerIds: number[]): SimulationResult {
   const db = getDb();

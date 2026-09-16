@@ -341,6 +341,67 @@ export function getPhoneByName(name: string) {
   return getDb().prepare("SELECT * FROM phones WHERE name = ?").get(name);
 }
 
+/**
+ * Live status for a single phone: its device pool/CMG, the CMG's member
+ * servers in priority order (each with live CCM service state), and the
+ * phone's current registration. Scoped to one phone so callers (e.g. an
+ * external dashboard card) can poll it cheaply instead of pulling the
+ * whole cluster's registration set.
+ */
+export function getPhoneStatus(name: string) {
+  const db = getDb();
+
+  const phone = db
+    .prepare(
+      `SELECT p.id, p.name, p.model, dp.name as device_pool_name, dp.cm_group_id, cg.name as cm_group_name
+       FROM phones p
+       JOIN device_pools dp ON p.device_pool_id = dp.id
+       JOIN cm_groups cg ON dp.cm_group_id = cg.id
+       WHERE p.name = ?`
+    )
+    .get(name) as
+    | { id: number; name: string; model: string; device_pool_name: string; cm_group_id: number; cm_group_name: string }
+    | undefined;
+
+  if (!phone) return null;
+
+  const members = db
+    .prepare(
+      `SELECT cgm.priority, s.id as server_id, s.name as server_name, s.hostname, s.ccm_service_active
+       FROM cm_group_members cgm
+       JOIN servers s ON cgm.server_id = s.id
+       WHERE cgm.cm_group_id = ?
+       ORDER BY cgm.priority`
+    )
+    .all(phone.cm_group_id) as {
+    priority: number;
+    server_id: number;
+    server_name: string;
+    hostname: string;
+    ccm_service_active: number;
+  }[];
+
+  const registration = db
+    .prepare(
+      `SELECT lr.registered_server_id, s.name as server_name, lr.status, lr.ip_address, lr.last_seen_at, lr.last_active_at
+       FROM latest_registrations lr
+       LEFT JOIN servers s ON lr.registered_server_id = s.id
+       WHERE lr.phone_id = ?`
+    )
+    .get(phone.id) as
+    | {
+        registered_server_id: number | null;
+        server_name: string | null;
+        status: string;
+        ip_address: string;
+        last_seen_at: string;
+        last_active_at: string;
+      }
+    | undefined;
+
+  return { phone, members, registration: registration || null };
+}
+
 export function getPhonesByDevicePool(devicePoolId: number) {
   return getDb()
     .prepare("SELECT * FROM phones WHERE device_pool_id = ?")

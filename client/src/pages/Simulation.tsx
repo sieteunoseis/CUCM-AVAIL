@@ -4,12 +4,20 @@ import type { Server, SimulationResult, TrunkImpact, GatewayImpact, ServiceImpac
 import { SgBadge } from "../components/SgBadge";
 import { AgBadge, useAvailabilityGroups } from "../components/AgBadge";
 
-export default function Simulation() {
+interface SimulationProps {
+  /** Deep-link: preselect these servers (matched by name/hostname, case-insensitive) as offline and auto-run. */
+  initialServerNames?: string[];
+  /** Deep-link: prefill the phone filter and auto-expand the CMG group containing it. */
+  initialPhone?: string;
+}
+
+export default function Simulation({ initialServerNames, initialPhone }: SimulationProps = {}) {
   const [servers, setServers] = useState<Server[]>([]);
   const [loading, setLoading] = useState(true);
   const [disabled, setDisabled] = useState<Set<number>>(new Set());
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [simLoading, setSimLoading] = useState(false);
+  const [phoneFilter, setPhoneFilter] = useState(initialPhone || "");
   const { cmgToAg, serverToAgs } = useAvailabilityGroups();
 
   useEffect(() => {
@@ -38,6 +46,21 @@ export default function Simulation() {
     }
   }, []);
 
+  // Resolve a deep-linked server name list to ids once servers have loaded,
+  // then run the simulation automatically. Runs once.
+  useEffect(() => {
+    if (!initialServerNames || initialServerNames.length === 0 || servers.length === 0) return;
+    const wanted = new Set(initialServerNames.map((n) => n.trim().toLowerCase()).filter(Boolean));
+    const ids = servers
+      .filter((s) => wanted.has(s.name.toLowerCase()) || wanted.has(s.name.split(".")[0].toLowerCase()) || wanted.has(s.hostname.toLowerCase()))
+      .map((s) => s.id);
+    if (ids.length === 0) return;
+    const idSet = new Set(ids);
+    setDisabled(idSet);
+    runSimulation(idSet);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [servers]);
+
   const toggle = (id: number) => {
     setDisabled((prev) => {
       const next = new Set(prev);
@@ -63,13 +86,36 @@ export default function Simulation() {
 
   return (
     <div className="space-y-3 animate-fade-in-up">
-      <div>
-        <h1 className="font-mono text-sm font-semibold text-noc-text-bright uppercase tracking-widest">
-          Failover Simulation
-        </h1>
-        <p className="text-xs text-noc-text-dim mt-1 font-mono">
-          Model the impact of server failures on phone registrations across CMG groups.
-        </p>
+      <div className="flex items-start justify-between gap-4 flex-wrap">
+        <div>
+          <h1 className="font-mono text-sm font-semibold text-noc-text-bright uppercase tracking-widest">
+            Failover Simulation
+          </h1>
+          <p className="text-xs text-noc-text-dim mt-1 font-mono">
+            Model the impact of server failures on phone registrations across CMG groups.
+          </p>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <label htmlFor="phone-filter" className="font-mono text-[10px] uppercase tracking-widest text-noc-text-dim">
+            Phone
+          </label>
+          <input
+            id="phone-filter"
+            type="text"
+            value={phoneFilter}
+            onChange={(e) => setPhoneFilter(e.target.value)}
+            placeholder="filter by name…"
+            className="bg-noc-bg border border-noc-border px-2 py-1 text-xs font-mono text-noc-text-bright placeholder:text-noc-text-dim focus:outline-none focus:border-noc-cyan/50 w-40"
+          />
+          {phoneFilter && (
+            <button
+              onClick={() => setPhoneFilter("")}
+              className="px-1.5 py-1 border border-noc-border text-[10px] font-mono uppercase tracking-widest text-noc-text-dim hover:text-noc-text hover:border-noc-border-bright transition-all cursor-pointer"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Impact Summary — always visible */}
@@ -248,7 +294,7 @@ export default function Simulation() {
             </div>
             <div className="divide-y divide-noc-border/50">
               {result.details.map((d) => (
-                <CmgImpactRow key={d.cmGroupId} detail={d} cmgToAg={cmgToAg} />
+                <CmgImpactRow key={d.cmGroupId} detail={d} cmgToAg={cmgToAg} phoneFilter={phoneFilter} />
               ))}
             </div>
           </div>
@@ -275,11 +321,21 @@ export default function Simulation() {
 function CmgImpactRow({
   detail,
   cmgToAg,
+  phoneFilter,
 }: {
   detail: SimulationResult["details"][0];
   cmgToAg: Map<string, string>;
+  phoneFilter?: string;
 }) {
+  const needle = (phoneFilter || "").trim().toLowerCase();
+  const hasMatch = needle.length > 0 && detail.movements.some((m) => m.phoneName.toLowerCase().includes(needle));
   const [expanded, setExpanded] = useState(false);
+
+  // Auto-expand once when a deep-linked/typed phone filter matches a phone in this group.
+  useEffect(() => {
+    if (hasMatch) setExpanded(true);
+  }, [hasMatch]);
+
   const hasImpact = detail.willReRegister > 0 || detail.unregistered > 0;
   const agLabel = cmgToAg.get(detail.cmGroupName);
 
@@ -383,10 +439,12 @@ function CmgImpactRow({
                 </tr>
               </thead>
               <tbody>
-                {detail.movements.map((m) => (
+                {detail.movements.map((m) => {
+                  const isMatch = needle.length > 0 && m.phoneName.toLowerCase().includes(needle);
+                  return (
                   <tr
                     key={m.phoneName}
-                    className="border-b border-noc-border/30 hover:bg-noc-panel/30 transition-colors"
+                    className={`border-b border-noc-border/30 hover:bg-noc-panel/30 transition-colors ${isMatch ? "bg-noc-cyan/10 outline outline-1 outline-noc-cyan/40 -outline-offset-1" : ""}`}
                   >
                     <td className="px-4 py-2 text-noc-text-bright truncate">{m.phoneName}</td>
                     <td className="px-4 py-2 text-noc-text-dim truncate">
@@ -421,7 +479,8 @@ function CmgImpactRow({
                       </span>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

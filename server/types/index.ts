@@ -136,3 +136,36 @@ export interface GatewayImpact {
   noService: number;
   movements: GatewayMovement[];
 }
+
+export interface PhoneImpact {
+  phoneName: string;
+  model: string;
+  devicePoolName: string;
+  cmGroupName: string;
+  currentServer: string | null;
+  newServer: string | null;
+  impact: "no_change" | "re_register" | "unregistered";
+}
+
+export interface PhoneStatusMember {
+  priority: number;
+  serverId: number;
+  serverName: string;
+  hostname: string;
+  ccmServiceActive: boolean;
+}
+
+export interface PhoneStatus {
+  phoneName: string;
+  model: string;
+  devicePoolName: string;
+  cmGroupName: string;
+  members: PhoneStatusMember[];
+  registeredServer: string | null;
+  registrationStatus: string | null;
+  ipAddress: string | null;
+  lastSeenAt: string | null;
+  lastActiveAt: string | null;
+  /** ok = on its priority-1 server; on_backup = registered but not on priority-1; down = not registered / priority-1 server (or all members) unreachable */
+  health: "ok" | "on_backup" | "down";
+}
