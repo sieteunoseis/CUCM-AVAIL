@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { api } from "../api/client";
-import type { Server, SimulationResult, TrunkImpact, GatewayImpact, ServiceImpact } from "../api/client";
+import type { Server, SimulationResult, TrunkImpact, GatewayImpact, ServiceImpact, PhoneStatus } from "../api/client";
 import { SgBadge } from "../components/SgBadge";
 import { AgBadge, useAvailabilityGroups } from "../components/AgBadge";
 
@@ -18,6 +18,8 @@ export default function Simulation({ initialServerNames, initialPhone }: Simulat
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [simLoading, setSimLoading] = useState(false);
   const [phoneFilter, setPhoneFilter] = useState(initialPhone || "");
+  const [phoneStatus, setPhoneStatus] = useState<PhoneStatus | null | undefined>(undefined);
+  const [phoneStatusLoading, setPhoneStatusLoading] = useState(false);
   const { cmgToAg, serverToAgs } = useAvailabilityGroups();
 
   useEffect(() => {
@@ -26,6 +28,38 @@ export default function Simulation({ initialServerNames, initialPhone }: Simulat
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  // Exact-name lookup for the phone filter, so landing on ?phone=<name>
+  // (with no servers toggled) still shows something immediately instead of
+  // an empty page -- current server, CMG chain, live health -- rather than
+  // only filtering rows in a simulation result that may not exist yet.
+  // undefined = not looked up / empty input, null = looked up, no match.
+  useEffect(() => {
+    const needle = phoneFilter.trim();
+    if (!needle) {
+      setPhoneStatus(undefined);
+      return;
+    }
+    let cancelled = false;
+    setPhoneStatusLoading(true);
+    const t = setTimeout(() => {
+      api
+        .getPhoneStatus(needle)
+        .then((s) => {
+          if (!cancelled) setPhoneStatus(s);
+        })
+        .catch(() => {
+          if (!cancelled) setPhoneStatus(null);
+        })
+        .finally(() => {
+          if (!cancelled) setPhoneStatusLoading(false);
+        });
+    }, 350);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [phoneFilter]);
 
   const ccmServers = servers.filter((s) => s.ccm_service_active === 1);
   const nonCcmCount = servers.length - ccmServers.length;
@@ -117,6 +151,65 @@ export default function Simulation({ initialServerNames, initialPhone }: Simulat
           )}
         </div>
       </div>
+
+      {/* Phone Lookup — shows immediately for ?phone=<name> deep links, before
+          any servers are toggled / a simulation has actually run. */}
+      {phoneFilter.trim() && (
+        <div className="border border-noc-border bg-noc-surface px-4 py-3">
+          {phoneStatusLoading && phoneStatus === undefined ? (
+            <div className="text-xs font-mono text-noc-text-dim uppercase tracking-widest">
+              Looking up "{phoneFilter}"…
+            </div>
+          ) : phoneStatus === null ? (
+            <div className="text-xs font-mono text-noc-text-dim">
+              No exact match for <span className="text-noc-text-bright">{phoneFilter}</span>. Once you run a
+              simulation below, rows containing this text will be highlighted.
+            </div>
+          ) : phoneStatus ? (
+            <div className="space-y-2">
+              <div className="flex items-center gap-3 flex-wrap">
+                <span className="font-mono text-sm text-noc-text-bright">{phoneStatus.phoneName}</span>
+                <span
+                  className={`font-mono text-[10px] font-bold uppercase tracking-widest px-2 py-0.5 ${
+                    phoneStatus.health === "ok"
+                      ? "bg-noc-green/10 text-noc-green"
+                      : phoneStatus.health === "on_backup"
+                        ? "bg-noc-amber/10 text-noc-amber"
+                        : "bg-noc-red/10 text-noc-red"
+                  }`}
+                >
+                  {phoneStatus.health === "ok" ? "ON PRIMARY" : phoneStatus.health === "on_backup" ? "ON BACKUP" : "DOWN"}
+                </span>
+                <span className="text-xs font-mono text-noc-text-dim">{phoneStatus.cmGroupName}</span>
+                <span className="text-xs font-mono text-noc-text-dim">{phoneStatus.devicePoolName}</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {phoneStatus.members.map((m) => (
+                  <div
+                    key={m.serverId}
+                    className={`flex items-center gap-1.5 px-2 py-1 border text-xs font-mono ${
+                      phoneStatus.registeredServer === m.serverName ? "border-noc-cyan/40 bg-noc-cyan/5" : "border-noc-border"
+                    }`}
+                  >
+                    <span className="text-noc-text-dim">P{m.priority}</span>
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${m.ccmServiceActive ? "bg-noc-green" : "bg-noc-red"}`}
+                      title={m.ccmServiceActive ? "CCM service running" : "CCM service down"}
+                    />
+                    <span className="text-noc-text-bright">{m.serverName.split(".")[0]}</span>
+                    {phoneStatus.registeredServer === m.serverName && (
+                      <span className="text-noc-cyan text-[10px]">current</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+              <p className="text-[10px] font-mono text-noc-text-dim uppercase tracking-widest">
+                Toggle a server below to preview what happens if it goes down.
+              </p>
+            </div>
+          ) : null}
+        </div>
+      )}
 
       {/* Impact Summary — always visible */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-noc-border">

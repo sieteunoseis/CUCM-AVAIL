@@ -65,6 +65,28 @@ export interface Phone {
   cm_group_name: string;
 }
 
+export interface PhoneStatusMember {
+  priority: number;
+  serverId: number;
+  serverName: string;
+  hostname: string;
+  ccmServiceActive: boolean;
+}
+
+export interface PhoneStatus {
+  phoneName: string;
+  model: string;
+  devicePoolName: string;
+  cmGroupName: string;
+  members: PhoneStatusMember[];
+  registeredServer: string | null;
+  registrationStatus: string | null;
+  ipAddress: string | null;
+  lastSeenAt: string | null;
+  lastActiveAt: string | null;
+  health: "ok" | "on_backup" | "down";
+}
+
 export interface PhonesResponse {
   phones: Phone[];
   total: number;
@@ -464,6 +486,14 @@ export const api = {
   getCmGroups: () => get<CmGroup[]>("/api/cmgroups"),
   getPhones: (limit = 100, offset = 0) =>
     get<PhonesResponse>(`/api/phones?limit=${limit}&offset=${offset}`),
+  // Returns null (rather than throwing) on a 404 -- an exact-name lookup
+  // that callers use to show a "not found" state instead of an error.
+  getPhoneStatus: async (name: string): Promise<PhoneStatus | null> => {
+    const res = await fetch(`${BASE}/api/phones/${encodeURIComponent(name)}/status`);
+    if (res.status === 404) return null;
+    if (!res.ok) throw new Error(`GET /api/phones/${name}/status: ${res.status}`);
+    return res.json();
+  },
   getRegStats: () => get<RegStat[]>("/api/registrations/stats"),
   getFailoverStatus: () => get<FailoverEntry[]>("/api/registrations/failover"),
   getFailoverDetails: () => get<FailoverDetail[]>("/api/registrations/failover/details"),
