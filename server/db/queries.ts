@@ -402,6 +402,28 @@ export function getPhoneStatus(name: string) {
   return { phone, members, registration: registration || null };
 }
 
+/**
+ * CM Group name for many phones in one query, e.g. for an external
+ * dashboard to resolve a batch of phones to their Availability Group
+ * (via GET /api/ag) without one round trip per phone. Unknown names are
+ * silently skipped rather than erroring -- callers just won't see them
+ * in the result.
+ */
+export function getCmGroupsForPhones(names: string[]) {
+  if (names.length === 0) return [];
+  const db = getDb();
+  const placeholders = names.map(() => "?").join(",");
+  return db
+    .prepare(
+      `SELECT p.name as phone_name, cg.name as cm_group_name
+       FROM phones p
+       JOIN device_pools dp ON p.device_pool_id = dp.id
+       JOIN cm_groups cg ON dp.cm_group_id = cg.id
+       WHERE p.name IN (${placeholders})`
+    )
+    .all(...names) as { phone_name: string; cm_group_name: string }[];
+}
+
 export function getPhonesByDevicePool(devicePoolId: number) {
   return getDb()
     .prepare("SELECT * FROM phones WHERE device_pool_id = ?")

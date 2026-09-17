@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getAllPhones, getPhoneCount, getPhoneStatus } from "../db/queries.js";
+import { getAllPhones, getPhoneCount, getPhoneStatus, getCmGroupsForPhones } from "../db/queries.js";
 import { simulatePhoneImpact } from "../simulation/failover.engine.js";
 import type { PhoneStatus } from "../types/index.js";
 
@@ -11,6 +11,27 @@ router.get("/", (req, res) => {
   const phones = getAllPhones(limit, offset);
   const total = getPhoneCount();
   res.json({ phones, total, limit, offset });
+});
+
+// Bulk CM Group lookup for many phones in one request, e.g.
+// GET /api/phones/cmgroups?names=SEP001,SEP002 -- for an external
+// dashboard resolving a whole page of machines to their Availability
+// Group (via GET /api/ag) without one round trip per phone. Unknown
+// names are simply absent from the result, not an error.
+router.get("/cmgroups", (req, res) => {
+  const raw = (req.query.names as string) || "";
+  const names = raw
+    .split(",")
+    .map((n) => n.trim())
+    .filter(Boolean);
+
+  if (names.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  const rows = getCmGroupsForPhones(names);
+  res.json(rows.map((r) => ({ phoneName: r.phone_name, cmGroupName: r.cm_group_name })));
 });
 
 // Live status for one phone: its CMG member servers (priority order, live
