@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import type { CmGroup } from "../api/client";
 import type { SortState } from "../components/TableHeader";
+import { shortName } from "../lib/hostname";
 
 // Colors assigned to channels for visual distinction
 const CHANNEL_COLORS = [
@@ -58,7 +59,7 @@ function CmgChannelPlan({ cmGroups }: { cmGroups: CmGroup[] }) {
   const serverFreq = new Map<string, { name: string; id: number; count: number }>();
   for (const cmg of cmGroups) {
     for (const m of cmg.members) {
-      const short = m.server_name.split(".")[0];
+      const short = shortName(m.server_name);
       const existing = serverFreq.get(short);
       if (existing) {
         existing.count++;
@@ -72,15 +73,15 @@ function CmgChannelPlan({ cmGroups }: { cmGroups: CmGroup[] }) {
   // Build overlap data: for each server, how many CMGs use it
   const serverCmgCount = new Map<string, number>();
   for (const s of allServers) {
-    const count = cmGroups.filter((g) => g.members.some((m) => m.server_name.split(".")[0] === s.name)).length;
+    const count = cmGroups.filter((g) => g.members.some((m) => shortName(m.server_name) === s.name)).length;
     serverCmgCount.set(s.name, count);
   }
 
   // --- Blast Zone / Channel computation ---
   const cmgServerSets = cmGroups.map((cmg) => ({
     cmg,
-    servers: new Set(cmg.members.map((m) => m.server_name.split(".")[0])),
-    serverKey: cmg.members.map((m) => m.server_name.split(".")[0]).sort().join(","),
+    servers: new Set(cmg.members.map((m) => shortName(m.server_name))),
+    serverKey: cmg.members.map((m) => shortName(m.server_name)).sort().join(","),
   }));
 
   // Union-Find for connected components
@@ -188,8 +189,8 @@ function CmgChannelPlan({ cmGroups }: { cmGroups: CmGroup[] }) {
         va = cmgColorMap.get(a.id) ?? 99;
         vb = cmgColorMap.get(b.id) ?? 99;
       } else {
-        const memberA = a.members.find((m) => m.server_name.split(".")[0] === key);
-        const memberB = b.members.find((m) => m.server_name.split(".")[0] === key);
+        const memberA = a.members.find((m) => shortName(m.server_name) === key);
+        const memberB = b.members.find((m) => shortName(m.server_name) === key);
         va = memberA?.priority ?? 99;
         vb = memberB?.priority ?? 99;
       }
@@ -267,7 +268,7 @@ function CmgChannelPlan({ cmGroups }: { cmGroups: CmGroup[] }) {
                       </span>
                     </td>
                     {allServers.map((s) => {
-                      const member = cmg.members.find((m) => m.server_name.split(".")[0] === s.name);
+                      const member = cmg.members.find((m) => shortName(m.server_name) === s.name);
                       if (!member) {
                         return <td key={s.name} className="text-center px-2 py-2.5 text-noc-border">·</td>;
                       }

@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import type { Server, SimulationResult, TrunkImpact, GatewayImpact, ServiceImpact, PhoneStatus } from "../api/client";
 import { SgBadge } from "../components/SgBadge";
 import { AgBadge, useAvailabilityGroups } from "../components/AgBadge";
+import { shortName } from "../lib/hostname";
 
 interface SimulationProps {
   /** Deep-link: preselect these servers (matched by name/hostname, case-insensitive) as offline and auto-run. */
@@ -86,7 +87,7 @@ export default function Simulation({ initialServerNames, initialPhone }: Simulat
     if (!initialServerNames || initialServerNames.length === 0 || servers.length === 0) return;
     const wanted = new Set(initialServerNames.map((n) => n.trim().toLowerCase()).filter(Boolean));
     const ids = servers
-      .filter((s) => wanted.has(s.name.toLowerCase()) || wanted.has(s.name.split(".")[0].toLowerCase()) || wanted.has(s.hostname.toLowerCase()))
+      .filter((s) => wanted.has(s.name.toLowerCase()) || wanted.has(shortName(s.name).toLowerCase()) || wanted.has(s.hostname.toLowerCase()))
       .map((s) => s.id);
     if (ids.length === 0) return;
     const idSet = new Set(ids);
@@ -196,7 +197,7 @@ export default function Simulation({ initialServerNames, initialPhone }: Simulat
                       className={`w-1.5 h-1.5 rounded-full ${m.ccmServiceActive ? "bg-noc-green" : "bg-noc-red"}`}
                       title={m.ccmServiceActive ? "CCM service running" : "CCM service down"}
                     />
-                    <span className="text-noc-text-bright">{m.serverName.split(".")[0]}</span>
+                    <span className="text-noc-text-bright">{shortName(m.serverName)}</span>
                     {phoneStatus.registeredServer === m.serverName && (
                       <span className="text-noc-cyan text-[10px]">current</span>
                     )}
@@ -275,7 +276,7 @@ export default function Simulation({ initialServerNames, initialPhone }: Simulat
             const agGroups = new Map<string, Server[]>();
             const ungrouped: Server[] = [];
             for (const server of ccmServers) {
-              const ags = serverToAgs.get(server.name.split(".")[0]) || [];
+              const ags = serverToAgs.get(shortName(server.name)) || [];
               if (ags.length > 0) {
                 for (const ag of ags) {
                   if (!agGroups.has(ag)) agGroups.set(ag, []);
@@ -321,7 +322,7 @@ export default function Simulation({ initialServerNames, initialPhone }: Simulat
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             <span className="font-mono text-xs text-noc-text-bright truncate">
-                              {server.name.split(".")[0]}
+                              {shortName(server.name)}
                             </span>
                             <span className="text-[9px] font-mono uppercase tracking-widest text-noc-text-dim">
                               {isPublisher ? "pub" : "sub"}
@@ -541,10 +542,10 @@ function CmgImpactRow({
                   >
                     <td className="px-4 py-2 text-noc-text-bright truncate">{m.phoneName}</td>
                     <td className="px-4 py-2 text-noc-text-dim truncate">
-                      {m.currentServer ? m.currentServer.split(".")[0] : "—"}
+                      {m.currentServer ? shortName(m.currentServer) : "—"}
                     </td>
                     <td className="px-4 py-2 text-noc-text-dim truncate">
-                      {m.newServer ? m.newServer.split(".")[0] : "—"}
+                      {m.newServer ? shortName(m.newServer) : "—"}
                     </td>
                     <td className="px-4 py-2 text-noc-cyan truncate">{m.subnetName || "—"}</td>
                     <td className="px-4 py-2">
@@ -658,10 +659,10 @@ function TrunkImpactSection({ trunkImpact, cmgToAg }: { trunkImpact: TrunkImpact
                           </span>
                         </td>
                         <td className="px-4 py-2 text-noc-text-dim truncate">
-                          {m.currentServer ? m.currentServer.split(".")[0] : "—"}
+                          {m.currentServer ? shortName(m.currentServer) : "—"}
                         </td>
                         <td className="px-4 py-2 text-noc-text-dim truncate">
-                          {m.newServer ? m.newServer.split(".")[0] : "—"}
+                          {m.newServer ? shortName(m.newServer) : "—"}
                         </td>
                         <td className="px-4 py-2">
                           <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 text-[10px] font-bold uppercase tracking-widest ${

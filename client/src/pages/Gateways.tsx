@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import type { GatewaySummary, GatewayRegistration } from "../api/client";
 import { useSort, ColHeader } from "../components/TableHeader";
 import { AgBadge, useAvailabilityGroups } from "../components/AgBadge";
+import { shortName } from "../lib/hostname";
 
 export default function Gateways() {
   const [summary, setSummary] = useState<GatewaySummary[]>([]);
@@ -160,7 +161,7 @@ export default function Gateways() {
                   }`}
                 >
                   <span className={`w-1.5 h-1.5 shrink-0 ${statusColor}`} />
-                  {server.split(".")[0]}
+                  {shortName(server)}
                 </button>
               );
             })}
@@ -237,7 +238,7 @@ export default function Gateways() {
                         </td>
                         <td className="px-4 py-2.5 text-noc-text truncate">
                           {g.registered_servers
-                            ? g.registered_servers.split(", ").map((s) => s.split(".")[0]).join(", ")
+                            ? g.registered_servers.split(", ").map((s) => shortName(s)).join(", ")
                             : "—"}
                         </td>
                       </tr>
@@ -258,7 +259,7 @@ export default function Gateways() {
         return (
           <div className="border border-noc-border bg-noc-surface overflow-hidden pane-resize">
             <div className="tmux-title text-noc-cyan">
-              Endpoints ({filtered.length}{activeServer ? ` on ${activeServer.split(".")[0]}` : ""})
+              Endpoints ({filtered.length}{activeServer ? ` on ${shortName(activeServer)}` : ""})
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-xs font-mono" style={{ tableLayout: "fixed" }}>

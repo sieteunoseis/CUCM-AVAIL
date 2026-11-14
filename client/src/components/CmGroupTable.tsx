@@ -1,6 +1,7 @@
 import type { CmGroup } from "../api/client";
 import { useSort, ColHeader } from "./TableHeader";
 import { AgBadge } from "./AgBadge";
+import { shortName } from "../lib/hostname";
 
 interface Props {
   groups: CmGroup[];
@@ -68,7 +69,7 @@ export default function CmGroupTable({ groups, phoneCounts, cmgToAg }: Props) {
                       <span className="inline-flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 bg-noc-green" />
                         <span className="font-mono text-xs text-noc-text truncate">
-                          {m1.server_name.split(".")[0]}
+                          {shortName(m1.server_name)}
                         </span>
                       </span>
                     )}
@@ -78,7 +79,7 @@ export default function CmGroupTable({ groups, phoneCounts, cmgToAg }: Props) {
                       <span className="inline-flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 bg-noc-blue" />
                         <span className="font-mono text-xs text-noc-text truncate">
-                          {m2.server_name.split(".")[0]}
+                          {shortName(m2.server_name)}
                         </span>
                       </span>
                     )}
@@ -88,7 +89,7 @@ export default function CmGroupTable({ groups, phoneCounts, cmgToAg }: Props) {
                       <span className="inline-flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 bg-noc-amber" />
                         <span className="font-mono text-xs text-noc-text truncate">
-                          {m3.server_name.split(".")[0]}
+                          {shortName(m3.server_name)}
                         </span>
                       </span>
                     )}

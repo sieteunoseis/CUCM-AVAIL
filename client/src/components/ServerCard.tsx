@@ -1,5 +1,6 @@
 import type { Server, FailoverEntry, CmGroup } from "../api/client";
 import StatusIndicator from "./StatusIndicator";
+import { shortName } from "../lib/hostname";
 
 interface Props {
   server: Server;
@@ -36,7 +37,7 @@ export default function ServerCard({ server, phoneCount, activeStats, compact, g
             <div className="min-w-0">
               <div className="flex items-center gap-2">
                 <span className="font-mono text-sm font-medium text-noc-text-bright truncate">
-                  {server.name.split(".")[0]}
+                  {shortName(server.name)}
                 </span>
                 <span className="shrink-0 px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
                   {isPublisher ? "PUB" : "SUB"}
@@ -72,7 +73,7 @@ export default function ServerCard({ server, phoneCount, activeStats, compact, g
             {isPublisher ? "PUB" : "SUB"}
           </span>
           <h3 className="font-mono text-lg font-medium text-noc-text-bright">
-            {server.name.split(".")[0]}
+            {shortName(server.name)}
           </h3>
         </div>
         <StatusIndicator active={active} size="lg" />

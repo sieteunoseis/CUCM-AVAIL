@@ -6,6 +6,7 @@ import ServerCard from "../components/ServerCard";
 import CmGroupTable from "../components/CmGroupTable";
 import { useSort, ColHeader } from "../components/TableHeader";
 import { AgBadge, useAvailabilityGroups } from "../components/AgBadge";
+import { shortName } from "../lib/hostname";
 
 export default function Dashboard() {
   const [servers, setServers] = useState<Server[]>([]);
@@ -138,7 +139,7 @@ export default function Dashboard() {
               <div className="flex items-center gap-3">
                 <div className={`w-2 h-2 ${activeServer.ccm_service_active === 1 ? "bg-noc-green animate-pulse-green" : "bg-noc-red animate-pulse-red"}`} />
                 <span className="text-xs font-mono text-noc-text-bright uppercase tracking-widest">
-                  {activeServer.name.split(".")[0]}
+                  {shortName(activeServer.name)}
                 </span>
                 <span className="px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
                   {activeServer.node_type === "Publisher" ? "PUB" : "SUB"}
@@ -146,7 +147,7 @@ export default function Dashboard() {
                 <span className={`text-[10px] font-mono font-semibold uppercase ${activeServer.ccm_service_active === 1 ? "text-noc-green" : "text-noc-red"}`}>
                   {activeServer.ccm_service_active === 1 ? "CCM Active" : "CCM Inactive"}
                 </span>
-                {(serverToAgs.get(activeServer.name.split(".")[0]) || []).map((label) => (
+                {(serverToAgs.get(shortName(activeServer.name)) || []).map((label) => (
                   <AgBadge key={label} label={label} />
                 ))}
               </div>
@@ -254,7 +255,7 @@ export default function Dashboard() {
                 <span className={`w-1.5 h-1.5 shrink-0 ${
                   active ? "bg-noc-green" : "bg-noc-red"
                 }`} />
-                {s.name.split(".")[0]}
+                {shortName(s.name)}
                 {isCurrent ? "*" : ""}
               </button>
             );
@@ -278,7 +279,7 @@ export default function Dashboard() {
                       <div className="flex items-center gap-2 min-w-0">
                         <span className={`w-2 h-2 shrink-0 ${active ? "bg-noc-green" : "bg-noc-red"}`} />
                         <span className="font-mono text-sm font-medium text-noc-text-bright truncate">
-                          {s.name.split(".")[0]}
+                          {shortName(s.name)}
                         </span>
                         <span className="shrink-0 px-1 py-0.5 text-[8px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
                           {isPublisher ? "PUB" : "SUB"}
@@ -290,9 +291,9 @@ export default function Dashboard() {
                         {active ? "CCM Active" : "Inactive"}
                       </span>
                     </div>
-                    {(serverToAgs.get(s.name.split(".")[0]) || []).length > 0 && (
+                    {(serverToAgs.get(shortName(s.name)) || []).length > 0 && (
                       <div className="flex items-center gap-1 mt-1.5">
-                        {serverToAgs.get(s.name.split(".")[0])!.map((label) => (
+                        {serverToAgs.get(shortName(s.name))!.map((label) => (
                           <AgBadge key={label} label={label} />
                         ))}
                       </div>
@@ -417,10 +418,10 @@ function FailoverPane({ failover, cmgToAg }: { failover: FailoverEntry[]; cmgToA
                     </span>
                   </td>
                   <td className="px-4 py-2.5 text-noc-amber truncate">
-                    {f.registered_server.split(".")[0]}
+                    {shortName(f.registered_server)}
                   </td>
                   <td className="px-4 py-2.5 text-noc-text-dim truncate">
-                    {f.primary_server.split(".")[0]}
+                    {shortName(f.primary_server)}
                   </td>
                   <td className="px-4 py-2.5 text-center">
                     <span className={`inline-flex items-center justify-center w-6 h-5 text-[10px] font-bold ${
@@ -470,10 +471,10 @@ function FailoverPane({ failover, cmgToAg }: { failover: FailoverEntry[]; cmgToA
 
             <div className="px-4 py-3 border-b border-noc-border flex items-center gap-6 text-xs font-mono">
               <span className="text-noc-text-dim">
-                Registered to <span className="text-noc-amber font-semibold">{modalRow.registered_server.split(".")[0]}</span>
+                Registered to <span className="text-noc-amber font-semibold">{shortName(modalRow.registered_server)}</span>
               </span>
               <span className="text-noc-text-dim">
-                Should be on <span className="text-noc-text-bright font-semibold">{modalRow.primary_server.split(".")[0]}</span>
+                Should be on <span className="text-noc-text-bright font-semibold">{shortName(modalRow.primary_server)}</span>
               </span>
               <span className={`inline-flex items-center justify-center px-2 py-0.5 text-[10px] font-bold ${
                 modalRow.registered_priority === 2

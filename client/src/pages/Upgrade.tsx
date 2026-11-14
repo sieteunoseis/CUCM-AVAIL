@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import type { UpgradeAnalysis, UpgradeStep, ParallelGroup } from "../api/client";
 import { AgBadge, getAgColor } from "../components/AgBadge";
 import { SgBadge } from "../components/SgBadge";
+import { shortName } from "../lib/hostname";
 
 function formatDuration(minutes: number): string {
   const h = Math.floor(minutes / 60);
@@ -86,7 +87,7 @@ export default function Upgrade() {
           const estMin = Math.max(...chunk.map((s) => s.estimatedMinutes.min));
           const estMax = Math.max(...chunk.map((s) => s.estimatedMinutes.max));
           const notes = chunk.length > 1
-            ? [`${chunk.length} servers upgrading in parallel`, `Servers: ${chunk.map((s) => s.serverName.split(".")[0]).join(", ")}`]
+            ? [`${chunk.length} servers upgrading in parallel`, `Servers: ${chunk.map((s) => shortName(s.serverName)).join(", ")}`]
             : [];
           const chunkAgLabels = Array.from(new Set(chunk.flatMap((s) => s.agLabels))).sort();
           const chunkSgLabels = Array.from(new Set(chunk.flatMap((s) => s.sgLabels || []))).sort();
@@ -514,7 +515,7 @@ function ParallelView({
                       <span key={step.serverId} className="flex items-center gap-1.5">
                         {i > 0 && <span className="text-noc-cyan font-mono text-xs">+</span>}
                         <span className="font-mono text-sm font-medium text-noc-text-bright">
-                          {step.serverName.split(".")[0]}
+                          {shortName(step.serverName)}
                         </span>
                         <span className="px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
                           {step.isPublisher ? "PUB" : "SUB"}
@@ -622,7 +623,7 @@ function ParallelView({
                     <div key={step.serverId} className="border border-noc-border/50 bg-noc-bg/50 p-4 space-y-3">
                       <div className="flex items-center gap-3">
                         <span className="font-mono text-sm font-semibold text-noc-text-bright">
-                          {step.serverName.split(".")[0]}
+                          {shortName(step.serverName)}
                         </span>
                         <span className="px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
                           {step.isPublisher ? "PUB" : step.isCcmActive ? "CCM" : "NON-CCM"}
@@ -740,7 +741,7 @@ function StepRow({
         <div className="flex-1 text-left min-w-0">
           <div className="flex items-center gap-2">
             <span className="font-mono text-sm font-medium text-noc-text-bright truncate">
-              {step.serverName.split(".")[0]}
+              {shortName(step.serverName)}
             </span>
             <span className="shrink-0 px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
               {step.isPublisher ? "PUB" : "SUB"}

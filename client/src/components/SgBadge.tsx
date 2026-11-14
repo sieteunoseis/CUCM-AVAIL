@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import type { ServiceGroup } from "../api/client";
+import { shortName } from "../lib/hostname";
 
 const SG_COLORS: Record<string, { bg: string; text: string }> = {
   "SG-1": { bg: "bg-noc-cyan/10", text: "text-noc-cyan" },
@@ -47,7 +48,7 @@ export function useServiceGroups() {
           svcMap.set(svc, sg.label);
         }
         for (const srv of sg.servers) {
-          const short = srv.split(".")[0];
+          const short = shortName(srv);
           if (!srvMap.has(short)) srvMap.set(short, []);
           if (!srvMap.get(short)!.includes(sg.label)) {
             srvMap.get(short)!.push(sg.label);

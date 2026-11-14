@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import type { PlannerResult, PlannerGeoZone } from "../api/client";
 import { useSort, ColHeader } from "../components/TableHeader";
 import { AgBadge } from "../components/AgBadge";
+import { shortName } from "../lib/hostname";
 
 export default function Planner() {
   const [result, setResult] = useState<PlannerResult | null>(null);
@@ -254,7 +255,7 @@ function ServerLoadPanel({
           <div key={s.serverName}>
             <div className="flex items-center justify-between mb-1">
               <div className="flex items-center gap-1.5 min-w-0">
-                <span className="font-mono text-xs text-noc-text truncate">{s.serverName.split(".")[0]}</span>
+                <span className="font-mono text-xs text-noc-text truncate">{shortName(s.serverName)}</span>
                 {s.agLabels.map((label) => (
                   <AgBadge key={label} label={label} />
                 ))}
@@ -333,7 +334,7 @@ function GeoZoneTable({ zones }: { zones: PlannerGeoZone[] }) {
                   <td className="px-4 py-2.5">
                     {zone.agLabel && <AgBadge label={zone.agLabel} />}
                   </td>
-                  <td className="px-4 py-2.5 font-mono text-noc-text-dim text-xs truncate">{zone.primaryServer.split(".")[0]}</td>
+                  <td className="px-4 py-2.5 font-mono text-noc-text-dim text-xs truncate">{shortName(zone.primaryServer)}</td>
                 </tr>
               );
             })}

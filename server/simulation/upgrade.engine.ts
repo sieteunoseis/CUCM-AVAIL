@@ -1,5 +1,6 @@
 import { getDb } from "../db/database.js";
 import { getServiceGroups } from "../db/queries.js";
+import { shortName } from "../utils/hostname.js";
 
 export interface UpgradeStep {
   stepNumber: number;
@@ -275,7 +276,7 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
   // Compute Availability Groups (same logic as ag.routes.ts)
   const cmgServerSets = cmGroups.map((cmg: any) => {
     const members = cmgMembers.get(cmg.id) || [];
-    const servers = members.map((m: any) => m.server_name.split(".")[0]).sort();
+    const servers = members.map((m: any) => shortName(m.server_name)).sort();
     return { cmg, servers, serverKey: servers.join(",") };
   });
 
@@ -330,8 +331,8 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
 
   // Populate agLabels on each step
   for (const step of steps) {
-    const shortName = step.serverName.split(".")[0];
-    step.agLabels = serverAgMap.get(shortName) || [];
+    const short = shortName(step.serverName);
+    step.agLabels = serverAgMap.get(short) || [];
   }
 
   // Compute SG labels from service_statuses
@@ -339,7 +340,7 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
   const serverSgMap = new Map<string, string[]>();
   for (const sg of sgGroups) {
     for (const srv of sg.servers) {
-      const short = srv.split(".")[0];
+      const short = shortName(srv);
       if (!serverSgMap.has(short)) serverSgMap.set(short, []);
       serverSgMap.get(short)!.push(sg.label);
     }
@@ -347,8 +348,8 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
 
   // Populate sgLabels on each step
   for (const step of steps) {
-    const shortName = step.serverName.split(".")[0];
-    step.sgLabels = serverSgMap.get(shortName) || [];
+    const short = shortName(step.serverName);
+    step.sgLabels = serverSgMap.get(short) || [];
   }
 
   const totalMinMin = steps.reduce((s, st) => s + st.estimatedMinutes.min, 0);
@@ -503,7 +504,7 @@ function makeGroup(groupNumber: number, steps: UpgradeStep[]): ParallelGroup {
   const notes: string[] = [];
   if (steps.length > 1) {
     notes.push(`${steps.length} servers upgrading in parallel`);
-    const names = steps.map((s) => s.serverName.split(".")[0]).join(", ");
+    const names = steps.map((s) => shortName(s.serverName)).join(", ");
     notes.push(`Servers: ${names}`);
   }
 

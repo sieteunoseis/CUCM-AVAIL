@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getAllCmGroups } from "../db/queries.js";
 import { getDb } from "../db/database.js";
+import { shortName } from "../utils/hostname.js";
 
 const router = Router();
 
@@ -10,8 +11,8 @@ router.get("/", (_req, res) => {
   // Build server sets per CMG
   const cmgServerSets = cmGroups.map((cmg) => ({
     cmg,
-    servers: cmg.members.map((m: any) => m.server_name.split(".")[0]).sort(),
-    serverKey: cmg.members.map((m: any) => m.server_name.split(".")[0]).sort().join(","),
+    servers: cmg.members.map((m: any) => shortName(m.server_name)).sort(),
+    serverKey: cmg.members.map((m: any) => shortName(m.server_name)).sort().join(","),
   }));
 
   // Group by identical server set

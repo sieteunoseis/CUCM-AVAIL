@@ -1,6 +1,7 @@
 import { getDb } from "../db/database.js";
 import { getAllSubnets } from "../db/queries.js";
 import { ipToLong, parseSubnets, matchSubnetFast, type SubnetRow } from "../utils/subnet.js";
+import { shortName } from "../utils/hostname.js";
 
 export interface GeoZone {
   name: string;
@@ -96,7 +97,7 @@ export function runPlanner(selectedCmgIds?: number[]): PlannerResult {
   // Compute Availability Groups (server → AG labels)
   const cmgServerSets = cmGroups.map((cmg: any) => {
     const members = cmgMembers.get(cmg.id) || [];
-    const servers = members.map((m: any) => m.server_name.split(".")[0]).sort();
+    const servers = members.map((m: any) => shortName(m.server_name)).sort();
     return { cmg, servers, serverKey: servers.join(",") };
   });
 
@@ -217,7 +218,7 @@ export function runPlanner(selectedCmgIds?: number[]): PlannerResult {
       serverName: name,
       phoneCount: data.count,
       cmgs: Array.from(data.cmgs),
-      agLabels: serverAgLabels.get(name.split(".")[0]) || [],
+      agLabels: serverAgLabels.get(shortName(name)) || [],
     }))
     .sort((a, b) => b.phoneCount - a.phoneCount);
 
@@ -333,7 +334,7 @@ export function runPlanner(selectedCmgIds?: number[]): PlannerResult {
       serverName: name,
       phoneCount: data.count,
       cmgs: Array.from(data.cmgs),
-      agLabels: serverAgLabels.get(name.split(".")[0]) || [],
+      agLabels: serverAgLabels.get(shortName(name)) || [],
     }))
     .sort((a, b) => b.phoneCount - a.phoneCount);
 

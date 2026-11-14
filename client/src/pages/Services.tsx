@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { api } from "../api/client";
 import type { ServiceStatusEntry, ServiceSummary, ServiceGroup } from "../api/client";
 import { SgBadge } from "../components/SgBadge";
+import { shortName } from "../lib/hostname";
 
 type SortKey = "name" | "active" | "sg";
 type SortDir = "asc" | "desc";
@@ -153,7 +154,7 @@ export default function Services() {
                   </th>
                   {serverNames.map((server) => (
                     <th key={server} className="text-center px-3 py-2.5 font-medium text-[10px] uppercase tracking-widest whitespace-nowrap">
-                      {server.split(".")[0]}
+                      {shortName(server)}
                     </th>
                   ))}
                 </tr>
@@ -195,7 +196,7 @@ export default function Services() {
                                       ? "bg-noc-text-dim/30"
                                       : "bg-noc-red"
                                 }`}
-                                title={`${service} on ${server.split(".")[0]}: ${entry.status}`}
+                                title={`${service} on ${shortName(server)}: ${entry.status}`}
                               />
                             ) : (
                               <span className="text-noc-text-dim/30">—</span>
@@ -238,7 +239,7 @@ export default function Services() {
                   <div className="flex flex-wrap gap-1">
                     {sg.servers.map((server) => (
                       <span key={server} className="px-1.5 py-0.5 bg-noc-green/10 text-noc-green text-[10px] font-mono">
-                        {server.split(".")[0]}
+                        {shortName(server)}
                       </span>
                     ))}
                   </div>

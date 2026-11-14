@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import type { Trunk, TrunkRegistration } from "../api/client";
 import { useSort, ColHeader } from "../components/TableHeader";
 import { AgBadge, useAvailabilityGroups } from "../components/AgBadge";
+import { shortName } from "../lib/hostname";
 
 export default function Trunks() {
   const [trunks, setTrunks] = useState<Trunk[]>([]);
@@ -151,7 +152,7 @@ export default function Trunks() {
                   }`}
                 >
                   <span className={`w-1.5 h-1.5 shrink-0 ${statusColor}`} />
-                  {server.split(".")[0]}
+                  {shortName(server)}
                 </button>
               );
             })}
@@ -167,7 +168,7 @@ export default function Trunks() {
         return (
         <div className="border border-noc-border bg-noc-surface overflow-hidden pane-resize">
           <div className="tmux-title text-noc-cyan">
-            Trunk Registrations ({filteredRegs.length}{activeServer ? ` on ${activeServer.split(".")[0]}` : ""})
+            Trunk Registrations ({filteredRegs.length}{activeServer ? ` on ${shortName(activeServer)}` : ""})
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs font-mono" style={{ tableLayout: "fixed" }}>

@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import type { PhoneReport, ReportSummary } from "../api/client";
 import { useSort, ColHeader } from "../components/TableHeader";
 import { AgBadge, useAvailabilityGroups } from "../components/AgBadge";
+import { shortName } from "../lib/hostname";
 
 export default function Report() {
   const [summary, setSummary] = useState<ReportSummary | null>(null);
@@ -120,7 +121,7 @@ export default function Report() {
                   filterServer === s.server_name ? "bg-noc-cyan/10 text-noc-cyan" : "hover:bg-noc-panel/30"
                 }`}
               >
-                <span className="font-mono text-[10px] text-noc-text truncate">{s.server_name.split(".")[0]}</span>
+                <span className="font-mono text-[10px] text-noc-text truncate">{shortName(s.server_name)}</span>
                 <span className="flex items-center gap-2">
                   <span className="font-mono text-[10px] text-noc-green">{s.active_24h > 0 ? `${Math.round((s.active_24h / s.registered) * 100)}%` : "—"}</span>
                   <span className="font-mono text-[10px] text-noc-amber font-semibold">{s.registered.toLocaleString()}</span>
@@ -224,7 +225,7 @@ export default function Report() {
               <span className="px-2 py-0.5 bg-noc-green/10 text-noc-green text-[10px] font-mono">Protocol: {filterProtocol}</span>
             )}
             {filterServer && (
-              <span className="px-2 py-0.5 bg-noc-cyan/10 text-noc-cyan text-[10px] font-mono">Server: {filterServer.split(".")[0]}</span>
+              <span className="px-2 py-0.5 bg-noc-cyan/10 text-noc-cyan text-[10px] font-mono">Server: {shortName(filterServer)}</span>
             )}
             {filterFirmware && (
               <span className="px-2 py-0.5 bg-noc-blue/10 text-noc-blue text-[10px] font-mono">Firmware: {filterFirmware}</span>
@@ -286,7 +287,7 @@ export default function Report() {
                       <td className="px-4 py-2 text-noc-text truncate">{r.dir_number || "—"}</td>
                       <td className="px-4 py-2 text-noc-text truncate" title={r.model}>{r.model || "—"}</td>
                       <td className="px-4 py-2 text-noc-text truncate">{r.protocol || "—"}</td>
-                      <td className="px-4 py-2 text-noc-text truncate">{r.server_name ? r.server_name.split(".")[0] : "—"}</td>
+                      <td className="px-4 py-2 text-noc-text truncate">{r.server_name ? shortName(r.server_name) : "—"}</td>
                       <td className="px-4 py-2 text-noc-text truncate">
                         <span className="inline-flex items-center gap-1">
                           {r.device_pool_name || "—"}

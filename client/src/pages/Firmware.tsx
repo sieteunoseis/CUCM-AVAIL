@@ -3,6 +3,7 @@ import { api } from "../api/client";
 import type { DevicePoolInfo, DevicePoolBreakdown } from "../api/client";
 import { useSort, ColHeader } from "../components/TableHeader";
 import { AgBadge, useAvailabilityGroups } from "../components/AgBadge";
+import { shortName } from "../lib/hostname";
 
 export default function Firmware() {
   const [pools, setPools] = useState<DevicePoolInfo[]>([]);
@@ -234,7 +235,7 @@ export default function Firmware() {
                 .sort(([, a], [, b]) => b - a)
                 .map(([server, count]) => (
                   <div key={server} className="flex items-center justify-between">
-                    <span className="font-mono text-xs text-noc-text truncate">{server.split(".")[0]}</span>
+                    <span className="font-mono text-xs text-noc-text truncate">{shortName(server)}</span>
                     <div className="flex items-center gap-3">
                       <div className="w-32 h-1.5 bg-noc-bg overflow-hidden">
                         <div className="h-full bg-noc-cyan" style={{ width: `${(count / totalSelected) * 100}%` }} />
@@ -276,11 +277,11 @@ export default function Firmware() {
                   .map((f) => (
                     <div key={`${f.currentServer}→${f.backupServer}`} className="flex items-center gap-3">
                       <span className="font-mono text-xs text-noc-text-bright w-28 text-right truncate" title={f.currentServer}>
-                        {f.currentServer.split(".")[0]}
+                        {shortName(f.currentServer)}
                       </span>
                       <span className="text-noc-text-dim text-xs">→</span>
                       <span className={`font-mono text-xs w-28 truncate ${f.backupServer ? "text-noc-amber" : "text-noc-red"}`} title={f.backupServer || "no backup"}>
-                        {f.backupServer ? f.backupServer.split(".")[0] : "NO BACKUP"}
+                        {f.backupServer ? shortName(f.backupServer) : "NO BACKUP"}
                       </span>
                       <div className="flex-1 h-1.5 bg-noc-bg overflow-hidden">
                         <div className="h-full bg-noc-red/60" style={{ width: `${(f.phoneCount / totalSelected) * 100}%` }} />

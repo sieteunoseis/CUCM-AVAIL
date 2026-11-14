@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
 import type { Server, SimulationResult, TrunkImpact } from "../api/client";
 import { api } from "../api/client";
+import { shortName } from "../lib/hostname";
 
 interface Props {
   servers: Server[];
@@ -89,7 +90,7 @@ export default function SimulationPanel({ servers }: Props) {
                     <div className="text-left min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="font-mono text-sm text-noc-text-bright truncate">
-                          {server.name.split(".")[0]}
+                          {shortName(server.name)}
                         </span>
                         <span className="shrink-0 px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
                           {isPublisher ? "PUB" : "SUB"}
@@ -310,10 +311,10 @@ function CmgImpactRow({
                   >
                     <td className="px-3 py-1.5 font-mono text-noc-text">{m.phoneName}</td>
                     <td className="px-3 py-1.5 font-mono text-noc-text-dim">
-                      {m.currentServer ? m.currentServer.split(".")[0] : "---"}
+                      {m.currentServer ? shortName(m.currentServer) : "---"}
                     </td>
                     <td className="px-3 py-1.5 font-mono text-noc-text-dim">
-                      {m.newServer ? m.newServer.split(".")[0] : "---"}
+                      {m.newServer ? shortName(m.newServer) : "---"}
                     </td>
                     <td className="px-3 py-1.5 font-mono text-noc-cyan">{m.subnetName || "—"}</td>
                     <td className="px-3 py-1.5">
@@ -416,10 +417,10 @@ function TrunkImpactSection({ trunkImpact }: { trunkImpact: TrunkImpact }) {
                         <td className="px-3 py-1.5 font-mono text-noc-text-dim truncate max-w-48">{m.description || "—"}</td>
                         <td className="px-3 py-1.5 font-mono text-noc-text">{m.cmGroupName}</td>
                         <td className="px-3 py-1.5 font-mono text-noc-text-dim">
-                          {m.currentServer ? m.currentServer.split(".")[0] : "—"}
+                          {m.currentServer ? shortName(m.currentServer) : "—"}
                         </td>
                         <td className="px-3 py-1.5 font-mono text-noc-text-dim">
-                          {m.newServer ? m.newServer.split(".")[0] : "—"}
+                          {m.newServer ? shortName(m.newServer) : "—"}
                         </td>
                         <td className="px-3 py-1.5">
                           <span className={`inline-block px-2 py-0.5 font-mono text-[10px] font-bold uppercase ${
