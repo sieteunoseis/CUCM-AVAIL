@@ -7,6 +7,7 @@ import CmGroupTable from "../components/CmGroupTable";
 import { useSort, ColHeader } from "../components/TableHeader";
 import { AgBadge, useAvailabilityGroups } from "../components/AgBadge";
 import { shortName } from "../lib/hostname";
+import { failoverDirection, filterFailoverForNode } from "../lib/nodeFilter";
 
 export default function Dashboard() {
   const [servers, setServers] = useState<Server[]>([]);
@@ -318,24 +319,45 @@ export default function Dashboard() {
       </div>
 
       {/* Failover Status */}
-      <FailoverPane failover={failover} cmgToAg={cmgToAg} />
+      <FailoverPane failover={failover} cmgToAg={cmgToAg} node={activeServer?.name ?? null} />
 
       {/* CMG Table */}
-      <CmGroupTable groups={groups} phoneCounts={phoneCounts} cmgToAg={cmgToAg} />
+      <CmGroupTable groups={groups} phoneCounts={phoneCounts} cmgToAg={cmgToAg} node={activeServer?.name ?? null} />
     </div>
   );
 }
 
-type FailoverSortKey = "cmg" | "registered" | "primary" | "priority" | "count";
+type FailoverSortKey = "cmg" | "direction" | "registered" | "primary" | "priority" | "count";
 type DetailSortKey = "phone" | "model" | "pool" | "ip";
 
-function FailoverPane({ failover, cmgToAg }: { failover: FailoverEntry[]; cmgToAg: Map<string, string> }) {
+function FailoverPane({
+  failover,
+  cmgToAg,
+  node,
+}: {
+  failover: FailoverEntry[];
+  cmgToAg: Map<string, string>;
+  /** Selected node's full server name; null on the "All" tab */
+  node: string | null;
+}) {
   const { sort, toggle, sorted } = useSort<FailoverSortKey>({ key: "count", dir: "desc" });
+  // "show all" is remembered per node, so switching node tabs resets to filtered
+  const [showAllFor, setShowAllFor] = useState<string | null>(null);
+  const showAll = node !== null && showAllFor === node;
+  const visible = node && !showAll ? filterFailoverForNode(failover, node) : failover;
   const { sort: detailSort, toggle: toggleDetail, sorted: sortedDetails } = useSort<DetailSortKey>();
   const [modalRow, setModalRow] = useState<FailoverEntry | null>(null);
   const [details, setDetails] = useState<FailoverDetail[]>([]);
   const [detailsLoading, setDetailsLoading] = useState(false);
-  const totalFailedOver = failover.reduce((s, f) => s + f.count, 0);
+  const totalFailedOver = visible.reduce((s, f) => s + f.count, 0);
+  const filterToggle = node && (
+    <button
+      onClick={() => setShowAllFor(showAll ? null : node)}
+      className="ml-2 underline decoration-dotted cursor-pointer hover:text-noc-text-bright"
+    >
+      {showAll ? "show filtered" : "show all"}
+    </button>
+  );
 
   const openModal = async (row: FailoverEntry) => {
     setModalRow(row);
@@ -355,15 +377,22 @@ function FailoverPane({ failover, cmgToAg }: { failover: FailoverEntry[]; cmgToA
     }
   };
 
-  if (failover.length === 0) {
+  if (visible.length === 0) {
     return (
       <div className="border border-noc-border bg-noc-surface overflow-hidden">
-        <div className="tmux-title text-noc-green">Failover Status</div>
+        <div className="tmux-title text-noc-green flex items-center justify-between">
+          <span>Failover Status</span>
+          {node && failover.length > 0 && (
+            <span className="font-mono text-[10px] normal-case tracking-normal">
+              0 of {failover.length} rows ·{filterToggle}
+            </span>
+          )}
+        </div>
         <div className="p-4 text-center">
           <div className="flex items-center justify-center gap-2">
             <span className="w-2 h-2 bg-noc-green" />
             <span className="font-mono text-sm text-noc-green font-semibold">
-              All phones on primary server
+              {node ? `All phones on primary for ${shortName(node)}` : "All phones on primary server"}
             </span>
           </div>
           <p className="font-mono text-[10px] text-noc-text-dim mt-2 uppercase tracking-widest">
@@ -374,9 +403,10 @@ function FailoverPane({ failover, cmgToAg }: { failover: FailoverEntry[]; cmgToA
     );
   }
 
-  const rows = sorted(failover, (f, k) => {
+  const rows = sorted(visible, (f, k) => {
     switch (k) {
       case "cmg": return f.cm_group_name;
+      case "direction": return node ? failoverDirection(f, node) ?? "" : "";
       case "registered": return f.registered_server;
       case "primary": return f.primary_server;
       case "priority": return f.registered_priority ?? 99;
@@ -390,7 +420,10 @@ function FailoverPane({ failover, cmgToAg }: { failover: FailoverEntry[]; cmgToA
         <div className="tmux-title text-noc-amber flex items-center justify-between">
           <span>Failover Status</span>
           <span className="font-mono text-[10px] text-noc-amber normal-case tracking-normal font-bold">
+            {node && <>{visible.length} of {failover.length} rows · </>}
             {totalFailedOver.toLocaleString()} phones on backup servers
+            {node && " ·"}
+            {filterToggle}
           </span>
         </div>
         <div className="overflow-x-auto">
@@ -398,6 +431,7 @@ function FailoverPane({ failover, cmgToAg }: { failover: FailoverEntry[]; cmgToA
             <thead>
               <tr className="border-b border-noc-border bg-noc-panel/50 text-noc-text-dim">
                 <ColHeader label="CM Group" sortKey="cmg" sort={sort} onSort={toggle} />
+                {node && <ColHeader label="Direction" sortKey="direction" sort={sort} onSort={toggle} />}
                 <ColHeader label="Registered To" sortKey="registered" sort={sort} onSort={toggle} />
                 <ColHeader label="Should Be" sortKey="primary" sort={sort} onSort={toggle} />
                 <ColHeader label="Priority" sortKey="priority" sort={sort} onSort={toggle} align="center" />
@@ -417,10 +451,18 @@ function FailoverPane({ failover, cmgToAg }: { failover: FailoverEntry[]; cmgToA
                       {cmgToAg.get(f.cm_group_name) && <AgBadge label={cmgToAg.get(f.cm_group_name)!} />}
                     </span>
                   </td>
-                  <td className="px-4 py-2.5 text-noc-amber truncate">
+                  {node && (() => {
+                    const dir = failoverDirection(f, node);
+                    return (
+                      <td className={`px-4 py-2.5 truncate ${dir === "moved_off" ? "text-noc-amber" : "text-noc-cyan"}`}>
+                        {dir === "moved_off" ? "moved off →" : dir === "landed_on" ? "landed on ←" : ""}
+                      </td>
+                    );
+                  })()}
+                  <td className={`px-4 py-2.5 text-noc-amber truncate ${f.registered_server === node ? "font-bold" : ""}`}>
                     {shortName(f.registered_server)}
                   </td>
-                  <td className="px-4 py-2.5 text-noc-text-dim truncate">
+                  <td className={`px-4 py-2.5 truncate ${f.primary_server === node ? "text-noc-text-bright font-bold" : "text-noc-text-dim"}`}>
                     {shortName(f.primary_server)}
                   </td>
                   <td className="px-4 py-2.5 text-center">

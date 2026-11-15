@@ -1,18 +1,29 @@
+import { useState } from "react";
 import type { CmGroup } from "../api/client";
 import { useSort, ColHeader } from "./TableHeader";
 import { AgBadge } from "./AgBadge";
 import { shortName } from "../lib/hostname";
+import { filterCmGroupsForNode } from "../lib/nodeFilter";
 
 interface Props {
   groups: CmGroup[];
   phoneCounts: Map<string, number>;
   cmgToAg?: Map<string, string>;
+  /** Selected node's full server name; null/undefined on the "All" tab */
+  node?: string | null;
 }
 
 type SortKey = "name" | "ag" | "p1" | "p2" | "p3" | "phones";
 
-export default function CmGroupTable({ groups, phoneCounts, cmgToAg }: Props) {
+export default function CmGroupTable({ groups, phoneCounts, cmgToAg, node = null }: Props) {
   const { sort, toggle, sorted } = useSort<SortKey>();
+  // "show all" is remembered per node, so switching node tabs resets to filtered
+  const [showAllFor, setShowAllFor] = useState<string | null>(null);
+  const showAll = node !== null && showAllFor === node;
+  const visible = node && !showAll ? filterCmGroupsForNode(groups, node) : groups;
+  const matchCount = node ? filterCmGroupsForNode(groups, node).length : groups.length;
+  const nodeCell = (serverName: string) =>
+    serverName === node ? "border border-noc-cyan/50 bg-noc-cyan/10 px-1" : "";
 
   const accessor = (g: CmGroup, key: SortKey): string | number => {
     switch (key) {
@@ -25,12 +36,23 @@ export default function CmGroupTable({ groups, phoneCounts, cmgToAg }: Props) {
     }
   };
 
-  const rows = sorted(groups, accessor);
+  const rows = sorted(visible, accessor);
 
   return (
     <div className="border border-noc-border bg-noc-surface overflow-hidden pane-resize">
-      <div className="tmux-title text-noc-amber">
-        Call Manager Groups
+      <div className="tmux-title text-noc-amber flex items-center justify-between">
+        <span>Call Manager Groups</span>
+        {node && (
+          <span className="font-mono text-[10px] normal-case tracking-normal font-bold">
+            {matchCount} of {groups.length} CM groups use {shortName(node)} ·
+            <button
+              onClick={() => setShowAllFor(showAll ? null : node)}
+              className="ml-2 underline decoration-dotted cursor-pointer hover:text-noc-text-bright"
+            >
+              {showAll ? "show filtered" : "show all"}
+            </button>
+          </span>
+        )}
       </div>
       <div className="overflow-x-auto">
         <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
@@ -45,6 +67,13 @@ export default function CmGroupTable({ groups, phoneCounts, cmgToAg }: Props) {
             </tr>
           </thead>
           <tbody>
+            {node && rows.length === 0 && (
+              <tr>
+                <td colSpan={6} className="px-4 py-4 text-center font-mono text-xs text-noc-text-dim">
+                  No CM groups use {shortName(node)}
+                </td>
+              </tr>
+            )}
             {rows.map((g, i) => {
               const m1 = g.members.find((m) => m.priority === 1);
               const m2 = g.members.find((m) => m.priority === 2);
@@ -68,7 +97,7 @@ export default function CmGroupTable({ groups, phoneCounts, cmgToAg }: Props) {
                     {m1 && (
                       <span className="inline-flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 bg-noc-green" />
-                        <span className="font-mono text-xs text-noc-text truncate">
+                        <span className={`font-mono text-xs text-noc-text truncate ${nodeCell(m1.server_name)}`}>
                           {shortName(m1.server_name)}
                         </span>
                       </span>
@@ -78,7 +107,7 @@ export default function CmGroupTable({ groups, phoneCounts, cmgToAg }: Props) {
                     {m2 && (
                       <span className="inline-flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 bg-noc-blue" />
-                        <span className="font-mono text-xs text-noc-text truncate">
+                        <span className={`font-mono text-xs text-noc-text truncate ${nodeCell(m2.server_name)}`}>
                           {shortName(m2.server_name)}
                         </span>
                       </span>
@@ -88,7 +117,7 @@ export default function CmGroupTable({ groups, phoneCounts, cmgToAg }: Props) {
                     {m3 && (
                       <span className="inline-flex items-center gap-1.5">
                         <span className="w-1.5 h-1.5 bg-noc-amber" />
-                        <span className="font-mono text-xs text-noc-text truncate">
+                        <span className={`font-mono text-xs text-noc-text truncate ${nodeCell(m3.server_name)}`}>
                           {shortName(m3.server_name)}
                         </span>
                       </span>
