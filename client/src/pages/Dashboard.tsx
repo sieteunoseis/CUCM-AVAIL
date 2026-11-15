@@ -319,10 +319,10 @@ export default function Dashboard() {
       </div>
 
       {/* Failover Status */}
-      <FailoverPane failover={failover} cmgToAg={cmgToAg} node={activeServer?.name ?? null} />
+      <FailoverPane key={`failover:${activeServer?.name ?? "all"}`} failover={failover} cmgToAg={cmgToAg} node={activeServer?.name ?? null} />
 
       {/* CMG Table */}
-      <CmGroupTable groups={groups} phoneCounts={phoneCounts} cmgToAg={cmgToAg} node={activeServer?.name ?? null} />
+      <CmGroupTable key={`cmg:${activeServer?.name ?? "all"}`} groups={groups} phoneCounts={phoneCounts} cmgToAg={cmgToAg} node={activeServer?.name ?? null} />
     </div>
   );
 }
@@ -341,9 +341,9 @@ function FailoverPane({
   node: string | null;
 }) {
   const { sort, toggle, sorted } = useSort<FailoverSortKey>({ key: "count", dir: "desc" });
-  // "show all" is remembered per node, so switching node tabs resets to filtered
-  const [showAllFor, setShowAllFor] = useState<string | null>(null);
-  const showAll = node !== null && showAllFor === node;
+  // The parent remounts this pane (key=node) on every node change, so
+  // "show all" always starts off filtered for each newly selected node.
+  const [showAll, setShowAll] = useState(false);
   const visible = node && !showAll ? filterFailoverForNode(failover, node) : failover;
   const { sort: detailSort, toggle: toggleDetail, sorted: sortedDetails } = useSort<DetailSortKey>();
   const [modalRow, setModalRow] = useState<FailoverEntry | null>(null);
@@ -352,7 +352,7 @@ function FailoverPane({
   const totalFailedOver = visible.reduce((s, f) => s + f.count, 0);
   const filterToggle = node && (
     <button
-      onClick={() => setShowAllFor(showAll ? null : node)}
+      onClick={() => setShowAll(!showAll)}
       className="ml-2 underline decoration-dotted cursor-pointer hover:text-noc-text-bright"
     >
       {showAll ? "show filtered" : "show all"}
