@@ -50,33 +50,15 @@ const sections: Section[] = [
 
         <div className="space-y-2">
           <H4>AG Numbering</H4>
-          <p>CMGs that use the <em>exact same set of servers</em> (regardless of priority order) are grouped into the same AG. Each AG is color-coded and numbered by phone count (AG-1 has the most phones). Different AGs should ideally share zero servers — making them fully independent for upgrades and failover.</p>
+          <p>CMGs that use the <em>exact same set of servers</em> (regardless of priority order) share an AG number. Numbers are assigned in CMG name order, so each distinct server set gets its own AG-N.</p>
         </div>
 
         <div className="space-y-2">
-          <H4>Blast Zones</H4>
-          <p>A blast zone is a group of AGs interconnected through shared servers. If you can trace a path from AG-1 to AG-4 through shared servers, they're in the same blast zone. If all your CMGs are in a single blast zone, every server failure has the potential to cascade.</p>
-          <div className="border border-noc-border bg-noc-bg p-3 mt-2">
-            <div className="font-mono text-[10px] text-noc-text-dim uppercase tracking-widest mb-2">Capacity</div>
-            <p className="text-xs">With N servers and M per CMG, you can have at most <strong>N ÷ M fully independent AGs</strong>.</p>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <H4>Cross-AG Servers</H4>
-          <p>A server that appears in more than one AG within a blast zone is a <span className="text-noc-red">cross-AG server</span>, marked with ⚠. These are shared failure points — if that server goes down, it impacts multiple AGs simultaneously.</p>
+          <H4>Comparing CM Groups</H4>
+          <p>Click a CMG row to select it. Every other row is marked <span className="text-noc-green">✓ safe</span> (shares no servers) or <span className="text-noc-red">✗ shares …</span> (lists the shared servers, which are also outlined in the grid). Click a second row to get a one-line verdict for that pair. Click the selected row again, or Clear, to reset.</p>
           <div className="border border-noc-red/20 bg-noc-red/5 p-3 mt-2">
             <div className="font-mono text-[10px] text-noc-red uppercase tracking-widest mb-2">Why this matters</div>
-            <p className="text-xs">If two device pools are designed so phones sitting next to each other are on different CMGs (e.g. call center redundancy), those CMGs must be in AGs that share zero servers. Otherwise a single server failure could take out both halves of the room.</p>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <H4>Upgrade Pairs</H4>
-          <p>Compares every AG combination and classifies them as safe (0% server overlap) or unsafe (shared servers). Use the AG filter chips to narrow down to specific groups you care about.</p>
-          <div className="border border-noc-green/20 bg-noc-green/5 p-3 mt-2 flex items-center gap-3">
-            <span className="font-mono text-noc-green text-lg font-bold">0%</span>
-            <p className="text-xs">A safe pair has completely disjoint server sets — you can upgrade one AG while the other continues operating.</p>
+            <p className="text-xs">A safe pair can be upgraded or lose every server on one side while the other keeps running. For split-room redundancy (e.g. call center side A/B), phones on each side must be in CMGs that are a safe pair.</p>
           </div>
         </div>
       </div>
