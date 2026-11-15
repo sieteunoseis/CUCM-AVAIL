@@ -3,7 +3,8 @@ import { api } from "../api/client";
 import type { CmGroup } from "../api/client";
 import type { SortState } from "../components/TableHeader";
 import { shortName } from "../lib/hostname";
-import { agNumbers, sharedServers } from "../lib/agCompare";
+import { sharedServers } from "../lib/agCompare";
+import { AgBadge, useAvailabilityGroups } from "../components/AgBadge";
 
 export default function AvailabilityGroups() {
   const [cmGroups, setCmGroups] = useState<CmGroup[]>([]);
@@ -63,7 +64,8 @@ function CmgMatrix({ cmGroups }: { cmGroups: CmGroup[] }) {
   }
   const allServers = [...serverFreq.entries()].sort((a, b) => b[1] - a[1]).map(([name]) => name);
 
-  const agNum = agNumbers(cmGroups);
+  const { cmgToAg } = useAvailabilityGroups();
+  const agNum = (cmg: CmGroup) => parseInt((cmgToAg.get(cmg.name) ?? "AG-999").slice(3), 10);
   const selected = cmGroups.find((g) => g.id === selectedId) ?? null;
   const compare = cmGroups.find((g) => g.id === compareId) ?? null;
 
@@ -101,8 +103,8 @@ function CmgMatrix({ cmGroups }: { cmGroups: CmGroup[] }) {
         va = a.name.toLowerCase();
         vb = b.name.toLowerCase();
       } else if (key === "ag") {
-        va = agNum.get(a.id) ?? 99;
-        vb = agNum.get(b.id) ?? 99;
+        va = agNum(a);
+        vb = agNum(b);
       } else if (key === "status") {
         va = selected ? (a.id === selected.id ? -1 : sharedServers(selected, a).length) : 0;
         vb = selected ? (b.id === selected.id ? -1 : sharedServers(selected, b).length) : 0;
@@ -221,9 +223,7 @@ function CmgMatrix({ cmGroups }: { cmGroups: CmGroup[] }) {
                       <span className={isSelected ? "text-noc-cyan" : isCompare ? "text-noc-amber" : ""}>{cmg.name}</span>
                     </td>
                     <td className="text-center px-2 py-2.5">
-                      <span className="inline-block w-12 py-0.5 text-[11px] font-mono font-semibold bg-noc-panel text-noc-text">
-                        AG-{agNum.get(cmg.id)}
-                      </span>
+                      {cmgToAg.has(cmg.name) ? <AgBadge label={cmgToAg.get(cmg.name)!} /> : <span className="text-noc-border">·</span>}
                     </td>
                     {allServers.map((s) => {
                       const member = cmg.members.find((m) => shortName(m.server_name) === s);

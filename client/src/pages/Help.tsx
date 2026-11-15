@@ -50,7 +50,7 @@ const sections: Section[] = [
 
         <div className="space-y-2">
           <H4>AG Numbering</H4>
-          <p>CMGs that use the <em>exact same set of servers</em> (regardless of priority order) share an AG number. Numbers are assigned in CMG name order, so each distinct server set gets its own AG-N.</p>
+          <p>CMGs that use the <em>exact same set of servers</em> (regardless of priority order) share an AG number. AGs are numbered by phone count (AG-1 has the most phones), the same numbering used on the Dashboard and Simulation pages.</p>
         </div>
 
         <div className="space-y-2">
