@@ -28,8 +28,26 @@ export function upsertServer(server: CucmServer) {
     });
 }
 
+/**
+ * All servers, plus `in_cm_group` (1 if the server is a member of any CM
+ * Group, i.e. a call-processing node). Use in_cm_group, not the live
+ * ccm_service_active flag, to decide whether a server is a CallManager node:
+ * a node that is down (or unreachable) during an outage reports
+ * ccm_service_active = 0 but is still a call-processing node.
+ */
 export function getAllServers() {
-  return getDb().prepare("SELECT * FROM servers ORDER BY name").all();
+  return getDb()
+    .prepare(
+      `SELECT s.*,
+              EXISTS(SELECT 1 FROM cm_group_members cgm WHERE cgm.server_id = s.id) AS in_cm_group
+       FROM servers s ORDER BY s.name`
+    )
+    .all();
+}
+
+/** True for call-processing nodes (in a CM Group, or CCM currently active). */
+export function isCallProcessing(server: { in_cm_group?: number; ccm_service_active?: number }): boolean {
+  return server.in_cm_group === 1 || server.ccm_service_active === 1;
 }
 
 export function getServerByName(name: string) {

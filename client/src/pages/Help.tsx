@@ -93,9 +93,11 @@ const sections: Section[] = [
           <ul className="list-none space-y-1 ml-2">
             <li><Badge color="green">NO IMPACT</Badge> — phone's current server is still up</li>
             <li><Badge color="amber">RE-REGISTER</Badge> — phone will move to the next available server in CMG priority</li>
+            <li><Badge color="cyan">ALREADY FAILED OVER</Badge> — the phone's CMG primary is one of the selected servers and the phone is already registered to a backup (an outage in progress)</li>
             <li><Badge color="red">UNREGISTERED</Badge> — all servers in the phone's CMG are disabled</li>
           </ul>
           <p>Already-unregistered phones are excluded — the simulation shows <em>additional</em> impact only.</p>
+          <p>Servers stay in the list while they are down (marked <strong>down now</strong>), so during a planned outage you can select the nodes that are offline and still see which phones they affect.</p>
         </div>
         <div className="space-y-2">
           <H4>Per-CMG Breakdown</H4>

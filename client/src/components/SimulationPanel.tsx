@@ -12,8 +12,10 @@ export default function SimulationPanel({ servers }: Props) {
   const [result, setResult] = useState<SimulationResult | null>(null);
   const [loading, setLoading] = useState(false);
 
-  // Only show CCM-active servers — non-CCM servers don't affect phone registration
-  const ccmServers = servers.filter((s) => s.ccm_service_active === 1);
+  // Only show call-processing servers — non-CCM servers don't affect phone registration.
+  // Call-processing nodes: anything in a CM Group, even if it's down right now
+  // (a node mid-outage reports CCM inactive but must stay selectable).
+  const ccmServers = servers.filter((s) => s.in_cm_group === 1 || s.ccm_service_active === 1);
 
   const runSimulation = useCallback(async (disabledIds: Set<number>) => {
     if (disabledIds.size === 0) {
@@ -95,6 +97,14 @@ export default function SimulationPanel({ servers }: Props) {
                         <span className="shrink-0 px-1.5 py-0.5 text-[9px] font-mono font-semibold uppercase tracking-widest bg-noc-border text-noc-text-dim">
                           {isPublisher ? "PUB" : "SUB"}
                         </span>
+                        {server.ccm_service_active !== 1 && (
+                          <span
+                            className="shrink-0 text-[9px] font-mono font-bold uppercase tracking-widest text-noc-red"
+                            title="CallManager service is not running (or the node is unreachable) right now"
+                          >
+                            DOWN NOW
+                          </span>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -132,9 +142,10 @@ export default function SimulationPanel({ servers }: Props) {
       {result && !loading && (
         <div className="space-y-3 animate-fade-in-up">
           {/* Summary Cards */}
-          <div className="grid grid-cols-3 gap-px bg-noc-border">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-noc-border">
             <SummaryCard label="NO IMPACT" value={result.noImpact} color="green" />
             <SummaryCard label="WILL RE-REGISTER" value={result.willReRegister} color="amber" />
+            <SummaryCard label="ALREADY FAILED OVER" value={result.failedOver} color="cyan" />
             <SummaryCard label="UNREGISTERED" value={result.unregistered} color="red" />
           </div>
 
@@ -175,17 +186,19 @@ function SummaryCard({
 }: {
   label: string;
   value: number;
-  color: "green" | "amber" | "red";
+  color: "green" | "amber" | "red" | "cyan";
 }) {
   const colors = {
     green: "text-noc-green",
     amber: "text-noc-amber",
     red: "text-noc-red",
+    cyan: "text-noc-cyan",
   };
   const bgColors = {
     green: "bg-noc-green/5",
     amber: "bg-noc-amber/5",
     red: "bg-noc-red/5",
+    cyan: "bg-noc-cyan/5",
   };
 
   return (
@@ -204,7 +217,7 @@ function CmgImpactRow({
   detail: SimulationResult["details"][0];
 }) {
   const [expanded, setExpanded] = useState(false);
-  const hasImpact = detail.willReRegister > 0 || detail.unregistered > 0;
+  const hasImpact = detail.willReRegister > 0 || detail.unregistered > 0 || detail.failedOver > 0;
 
   return (
     <div>
@@ -232,6 +245,9 @@ function CmgImpactRow({
             <span className="text-noc-amber">
               {detail.willReRegister} re-reg
             </span>
+          )}
+          {detail.failedOver > 0 && (
+            <span className="text-noc-cyan">{detail.failedOver} failed over</span>
           )}
           {detail.unregistered > 0 && (
             <span className="text-noc-red">{detail.unregistered} down</span>
@@ -282,6 +298,9 @@ function CmgImpactRow({
                     {si.willReRegister > 0 && (
                       <span className="text-noc-amber">{si.willReRegister} re-reg</span>
                     )}
+                    {si.failedOver > 0 && (
+                      <span className="text-noc-cyan">{si.failedOver} failed over</span>
+                    )}
                     {si.unregistered > 0 && (
                       <span className="text-noc-red">{si.unregistered} down</span>
                     )}
@@ -324,14 +343,18 @@ function CmgImpactRow({
                             ? "bg-noc-green/10 text-noc-green"
                             : m.impact === "re_register"
                               ? "bg-noc-amber/10 text-noc-amber"
-                              : "bg-noc-red/10 text-noc-red"
+                              : m.impact === "failed_over"
+                                ? "bg-noc-cyan/10 text-noc-cyan"
+                                : "bg-noc-red/10 text-noc-red"
                         }`}
                       >
                         {m.impact === "no_change"
                           ? "OK"
                           : m.impact === "re_register"
                             ? "RE-REG"
-                            : "DOWN"}
+                            : m.impact === "failed_over"
+                              ? "FAILED OVER"
+                              : "DOWN"}
                       </span>
                     </td>
                   </tr>

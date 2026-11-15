@@ -1,5 +1,5 @@
 import { getDb } from "../db/database.js";
-import { getServiceGroups } from "../db/queries.js";
+import { getAllServers, getServiceGroups, isCallProcessing } from "../db/queries.js";
 import { shortName } from "../utils/hostname.js";
 
 export interface UpgradeStep {
@@ -75,9 +75,7 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
   const db = getDb();
 
   // Get ALL servers (publisher may not have CCM active but must be upgraded first)
-  const allServers = db
-    .prepare("SELECT * FROM servers ORDER BY name")
-    .all() as any[];
+  const allServers = getAllServers() as any[];
 
   if (allServers.length === 0) {
     return {
@@ -123,9 +121,9 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
   }
 
   const phoneServerMap = buildPhoneServerMap(db, cmGroups, cmgMembers);
-  const ccmServerIds = new Set(
-    allServers.filter((s: any) => s.ccm_service_active === 1).map((s: any) => s.id)
-  );
+  // Call-processing role comes from CM Group membership, not live CCM state,
+  // so a node that is currently down keeps its place in the upgrade order.
+  const ccmServerIds = new Set(allServers.filter(isCallProcessing).map((s: any) => s.id));
 
   const steps: UpgradeStep[] = [];
   const upgraded = new Set<number>();
@@ -152,10 +150,10 @@ export function analyzeUpgradeOrder(): UpgradeAnalysis {
 
   // Remaining servers: CCM-active subscribers first, then non-CCM nodes last
   const ccmSubscribers = allServers.filter(
-    (s: any) => s.node_type !== "Publisher" && s.ccm_service_active === 1
+    (s: any) => s.node_type !== "Publisher" && isCallProcessing(s)
   );
   const nonCcmSubscribers = allServers.filter(
-    (s: any) => s.node_type !== "Publisher" && s.ccm_service_active !== 1
+    (s: any) => s.node_type !== "Publisher" && !isCallProcessing(s)
   );
 
   // Build service availability map: service_name → set of active server IDs
@@ -663,7 +661,7 @@ function computeStep(
   // Subscriber (CCM active): 60-120 min upgrade + 30 min switch/reboot
   // Non-CCM subscriber: 60-120 min upgrade + 30 min switch/reboot
   const isPublisher = server.node_type === "Publisher";
-  const isCcm = server.ccm_service_active === 1;
+  const isCcm = isCallProcessing(server);
   let estimatedMinutes: { min: number; max: number };
 
   if (isPublisher) {

@@ -38,6 +38,8 @@ export interface Server {
   hostname: string;
   node_type: string;
   ccm_service_active: number;
+  /** 1 if the server is in any CM Group (call-processing node), regardless of live CCM state */
+  in_cm_group: number;
   last_checked_at: string | null;
 }
 
@@ -129,7 +131,7 @@ export interface PhoneMovement {
   phoneName: string;
   currentServer: string | null;
   newServer: string | null;
-  impact: "no_change" | "re_register" | "unregistered";
+  impact: "no_change" | "re_register" | "failed_over" | "unregistered";
   ipAddress?: string;
   subnetName?: string;
 }
@@ -141,6 +143,7 @@ export interface SubnetImpact {
   noImpact: number;
   willReRegister: number;
   unregistered: number;
+  failedOver: number;
 }
 
 export interface SimulationDetail {
@@ -150,6 +153,7 @@ export interface SimulationDetail {
   noImpact: number;
   willReRegister: number;
   unregistered: number;
+  failedOver: number;
   movements: PhoneMovement[];
   subnetImpacts?: SubnetImpact[];
 }
@@ -475,6 +479,8 @@ export interface SimulationResult {
   noImpact: number;
   willReRegister: number;
   unregistered: number;
+  /** Phones whose CMG primary is a selected server and that are already on a backup (outage in progress) */
+  failedOver: number;
   details: SimulationDetail[];
   trunkImpact?: TrunkImpact;
   gatewayImpact?: GatewayImpact;

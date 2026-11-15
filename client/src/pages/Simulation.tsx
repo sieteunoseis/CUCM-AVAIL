@@ -62,7 +62,9 @@ export default function Simulation({ initialServerNames, initialPhone }: Simulat
     };
   }, [phoneFilter]);
 
-  const ccmServers = servers.filter((s) => s.ccm_service_active === 1);
+  // Call-processing nodes: anything in a CM Group, even if it's down right now
+  // (a node mid-outage reports CCM inactive but must stay selectable).
+  const ccmServers = servers.filter((s) => s.in_cm_group === 1 || s.ccm_service_active === 1);
   const nonCcmCount = servers.length - ccmServers.length;
 
   const runSimulation = useCallback(async (disabledIds: Set<number>) => {
@@ -213,7 +215,7 @@ export default function Simulation({ initialServerNames, initialPhone }: Simulat
       )}
 
       {/* Impact Summary — always visible */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-px bg-noc-border">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-px bg-noc-border">
         <div className="bg-noc-surface p-4 text-center">
           <div className={`font-mono text-3xl font-bold ${result ? "text-noc-cyan" : "text-noc-text-dim"}`}>
             {result ? result.totalPhones.toLocaleString() : "—"}
@@ -239,6 +241,15 @@ export default function Simulation({ initialServerNames, initialPhone }: Simulat
             {result?.trunkImpact && result.trunkImpact.willReRegister > 0 && <span className="normal-case tracking-normal text-noc-amber"> / {result.trunkImpact.willReRegister} trunks</span>}
             {result?.gatewayImpact && result.gatewayImpact.degraded > 0 && <span className="normal-case tracking-normal text-noc-amber"> / {result.gatewayImpact.degraded} gw degraded</span>}
           </div>
+        </div>
+        <div
+          className={`p-4 text-center ${result && result.failedOver > 0 ? "bg-noc-cyan/5" : "bg-noc-surface"}`}
+          title="Primary is one of the selected servers and the phone is already registered to a backup (outage in progress)"
+        >
+          <div className={`font-mono text-3xl font-bold ${result && result.failedOver > 0 ? "text-noc-cyan" : "text-noc-text-dim"}`}>
+            {result ? result.failedOver.toLocaleString() : "—"}
+          </div>
+          <div className="font-mono text-[10px] uppercase tracking-widest mt-2 text-noc-text-dim">Already Failed Over</div>
         </div>
         <div className={`p-4 text-center ${result && result.unregistered > 0 ? "bg-noc-red/5" : "bg-noc-surface"}`}>
           <div className={`font-mono text-3xl font-bold ${result && result.unregistered > 0 ? "text-noc-red" : "text-noc-text-dim"}`}>
@@ -327,6 +338,14 @@ export default function Simulation({ initialServerNames, initialPhone }: Simulat
                             <span className="text-[9px] font-mono uppercase tracking-widest text-noc-text-dim">
                               {isPublisher ? "pub" : "sub"}
                             </span>
+                            {server.ccm_service_active !== 1 && (
+                              <span
+                                className="text-[9px] font-mono font-bold uppercase tracking-widest text-noc-red"
+                                title="CallManager service is not running (or the node is unreachable) right now"
+                              >
+                                down now
+                              </span>
+                            )}
                           </div>
                           {/* Toggle switch */}
                           <div
@@ -430,7 +449,7 @@ function CmgImpactRow({
     if (hasMatch) setExpanded(true);
   }, [hasMatch]);
 
-  const hasImpact = detail.willReRegister > 0 || detail.unregistered > 0;
+  const hasImpact = detail.willReRegister > 0 || detail.unregistered > 0 || detail.failedOver > 0;
   const agLabel = cmgToAg.get(detail.cmGroupName);
 
   return (
@@ -446,7 +465,9 @@ function CmgImpactRow({
                 ? "bg-noc-red"
                 : detail.willReRegister > 0
                   ? "bg-noc-amber"
-                  : "bg-noc-green"
+                  : detail.failedOver > 0
+                    ? "bg-noc-cyan"
+                    : "bg-noc-green"
             }`}
           />
           <span className="font-mono text-sm text-noc-text-bright">
@@ -460,6 +481,9 @@ function CmgImpactRow({
             <span className="text-noc-amber">
               {detail.willReRegister.toLocaleString()} re-reg
             </span>
+          )}
+          {detail.failedOver > 0 && (
+            <span className="text-noc-cyan">{detail.failedOver.toLocaleString()} failed over</span>
           )}
           {detail.unregistered > 0 && (
             <span className="text-noc-red">{detail.unregistered.toLocaleString()} down</span>
@@ -484,10 +508,11 @@ function CmgImpactRow({
               {[...detail.subnetImpacts]
                 .sort((a, b) => b.totalPhones - a.totalPhones)
                 .map((si) => {
-                  const affected = si.willReRegister + si.unregistered;
+                  const affected = si.willReRegister + si.unregistered + si.failedOver;
                   const pct = si.totalPhones > 0 ? Math.round((affected / si.totalPhones) * 100) : 0;
                   const reRegPct = si.totalPhones > 0 ? (si.willReRegister / si.totalPhones) * 100 : 0;
                   const unregPct = si.totalPhones > 0 ? (si.unregistered / si.totalPhones) * 100 : 0;
+                  const failedPct = si.totalPhones > 0 ? (si.failedOver / si.totalPhones) * 100 : 0;
                   const okPct = si.totalPhones > 0 ? (si.noImpact / si.totalPhones) * 100 : 0;
                   const borderColor = pct === 0 ? "border-noc-green/20" : pct === 100 ? "border-noc-red/30" : "border-noc-amber/30";
                   return (
@@ -506,11 +531,13 @@ function CmgImpactRow({
                       <div className="h-2 bg-noc-panel flex overflow-hidden mb-2">
                         {okPct > 0 && <div className="h-full bg-noc-green/40" style={{ width: `${okPct}%` }} />}
                         {reRegPct > 0 && <div className="h-full bg-noc-amber" style={{ width: `${reRegPct}%` }} />}
+                        {failedPct > 0 && <div className="h-full bg-noc-cyan" style={{ width: `${failedPct}%` }} />}
                         {unregPct > 0 && <div className="h-full bg-noc-red" style={{ width: `${unregPct}%` }} />}
                       </div>
                       <div className="flex items-center gap-3 font-mono text-[10px]">
                         <span className="text-noc-green">{si.noImpact} ok</span>
                         {si.willReRegister > 0 && <span className="text-noc-amber">{si.willReRegister} re-reg</span>}
+                        {si.failedOver > 0 && <span className="text-noc-cyan">{si.failedOver} failed over</span>}
                         {si.unregistered > 0 && <span className="text-noc-red">{si.unregistered} down</span>}
                         <span className="text-noc-text-dim ml-auto">{si.totalPhones} total</span>
                       </div>
@@ -555,7 +582,9 @@ function CmgImpactRow({
                             ? "bg-noc-green/10 text-noc-green"
                             : m.impact === "re_register"
                               ? "bg-noc-amber/10 text-noc-amber"
-                              : "bg-noc-red/10 text-noc-red"
+                              : m.impact === "failed_over"
+                                ? "bg-noc-cyan/10 text-noc-cyan"
+                                : "bg-noc-red/10 text-noc-red"
                         }`}
                       >
                         <span className={`w-1.5 h-1.5 ${
@@ -563,13 +592,17 @@ function CmgImpactRow({
                             ? "bg-noc-green"
                             : m.impact === "re_register"
                               ? "bg-noc-amber"
-                              : "bg-noc-red"
+                              : m.impact === "failed_over"
+                                ? "bg-noc-cyan"
+                                : "bg-noc-red"
                         }`} />
                         {m.impact === "no_change"
                           ? "OK"
                           : m.impact === "re_register"
                             ? "RE-REG"
-                            : "DOWN"}
+                            : m.impact === "failed_over"
+                              ? "FAILED OVER"
+                              : "DOWN"}
                       </span>
                     </td>
                   </tr>

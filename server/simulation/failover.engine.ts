@@ -1,9 +1,34 @@
 import { getDb } from "../db/database.js";
-import type { SimulationResult, SimulationDetail, PhoneMovement, SubnetImpact, TrunkImpact, TrunkMovement, GatewayImpact, GatewayMovement, ServiceImpact, PhoneImpact } from "../types/index.js";
+import type { SimulationResult, SimulationDetail, PhoneMovement, SubnetImpact, TrunkImpact, TrunkMovement, GatewayImpact, GatewayMovement, ServiceImpact, PhoneImpact, PhoneImpactKind } from "../types/index.js";
 import { getAllSubnets, getServiceGroups, getPhoneStatus } from "../db/queries.js";
 import { ipToLong, parseSubnets, matchSubnetFast, type SubnetRow } from "../utils/subnet.js";
 import { config } from "../config.js";
 import { SERVICE_DISPLAY_NAMES } from "../services/serviceability.service.js";
+
+/**
+ * Classify a phone's impact when `disabledSet` servers are offline.
+ *
+ * Uses the live registration when there is one. During an outage that has
+ * already started, phones on a downed server have already moved to a backup,
+ * so the live registration alone would call them "no_change". Those phones
+ * (CMG primary is a selected server, currently registered elsewhere) are
+ * reported as "failed_over" so the outage's impact stays visible.
+ */
+function classifyImpact(
+  members: { server_id: number }[],
+  disabledSet: Set<number>,
+  currentServerId: number | null,
+  isAssumed: boolean
+): PhoneImpactKind {
+  const available = members.filter((m) => !disabledSet.has(m.server_id));
+  if (available.length === 0) return "unregistered";
+  if (currentServerId !== null && disabledSet.has(currentServerId)) return "re_register";
+  const primaryId = members.length > 0 ? members[0].server_id : null;
+  if (!isAssumed && primaryId !== null && disabledSet.has(primaryId) && currentServerId !== primaryId) {
+    return "failed_over";
+  }
+  return "no_change";
+}
 
 /**
  * Same re-register/unregister logic as simulateFailover(), scoped to a
@@ -29,14 +54,7 @@ export function simulatePhoneImpact(phoneName: string, disabledServerIds: number
   const currentServerName = registration ? registration.server_name : assumedServerName;
   const isAssumed = !registration;
 
-  let impact: "no_change" | "re_register" | "unregistered";
-  if (newPrimaryServerId === null) {
-    impact = "unregistered";
-  } else if (currentServerId === null || !disabledSet.has(currentServerId)) {
-    impact = "no_change";
-  } else {
-    impact = "re_register";
-  }
+  const impact = classifyImpact(members, disabledSet, currentServerId, isAssumed);
 
   return {
     phoneName: phone.name,
@@ -108,6 +126,7 @@ export function simulateFailover(disabledServerIds: number[]): SimulationResult 
   let totalNoImpact = 0;
   let totalReRegister = 0;
   let totalUnregistered = 0;
+  let totalFailedOver = 0;
   let totalPhones = 0;
 
   for (const cmg of cmGroups) {
@@ -121,6 +140,7 @@ export function simulateFailover(disabledServerIds: number[]): SimulationResult 
     let groupNoImpact = 0;
     let groupReRegister = 0;
     let groupUnregistered = 0;
+    let groupFailedOver = 0;
 
     for (const phone of phones) {
       const reg = regMap.get(phone.id);
@@ -131,18 +151,11 @@ export function simulateFailover(disabledServerIds: number[]): SimulationResult 
       const currentServerName = reg?.server_name ?? assumedServerName;
       const isAssumed = !reg;
 
-      let impact: "no_change" | "re_register" | "unregistered";
-
-      if (newPrimaryServerId === null) {
-        impact = "unregistered";
-        groupUnregistered++;
-      } else if (currentServerId === null || !disabledSet.has(currentServerId)) {
-        impact = "no_change";
-        groupNoImpact++;
-      } else {
-        impact = "re_register";
-        groupReRegister++;
-      }
+      const impact = classifyImpact(members, disabledSet, currentServerId, isAssumed);
+      if (impact === "unregistered") groupUnregistered++;
+      else if (impact === "re_register") groupReRegister++;
+      else if (impact === "failed_over") groupFailedOver++;
+      else groupNoImpact++;
 
       const phoneIp = reg?.ip_address || "";
       const ipNum = phoneIp ? ipToLong(phoneIp) : 0;
@@ -178,12 +191,14 @@ export function simulateFailover(disabledServerIds: number[]): SimulationResult 
           noImpact: 0,
           willReRegister: 0,
           unregistered: 0,
+          failedOver: 0,
         });
       }
       const si = subnetMap.get(key)!;
       si.totalPhones++;
       if (m.impact === "no_change") si.noImpact++;
       else if (m.impact === "re_register") si.willReRegister++;
+      else if (m.impact === "failed_over") si.failedOver++;
       else si.unregistered++;
     }
 
@@ -195,6 +210,7 @@ export function simulateFailover(disabledServerIds: number[]): SimulationResult 
         noImpact: groupNoImpact,
         willReRegister: groupReRegister,
         unregistered: groupUnregistered,
+        failedOver: groupFailedOver,
         movements,
         subnetImpacts: Array.from(subnetMap.values()).filter((s) => s.subnetName !== "Unknown"),
       });
@@ -203,6 +219,7 @@ export function simulateFailover(disabledServerIds: number[]): SimulationResult 
     totalNoImpact += groupNoImpact;
     totalReRegister += groupReRegister;
     totalUnregistered += groupUnregistered;
+    totalFailedOver += groupFailedOver;
     totalPhones += phones.length;
   }
 
@@ -222,6 +239,7 @@ export function simulateFailover(disabledServerIds: number[]): SimulationResult 
     noImpact: totalNoImpact,
     willReRegister: totalReRegister,
     unregistered: totalUnregistered,
+    failedOver: totalFailedOver,
     details,
     trunkImpact,
     gatewayImpact,

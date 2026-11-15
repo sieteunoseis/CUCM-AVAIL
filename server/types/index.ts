@@ -60,11 +60,21 @@ export interface ServiceImpact {
   impact: "no_change" | "degraded" | "outage";
 }
 
+/**
+ * no_change    - phone stays where it is
+ * re_register  - phone is on a selected server and will move to the next CMG member
+ * failed_over  - phone's CMG primary is a selected server and it is already on a backup
+ * unregistered - no CMG member left
+ */
+export type PhoneImpactKind = "no_change" | "re_register" | "failed_over" | "unregistered";
+
 export interface SimulationResult {
   totalPhones: number;
   noImpact: number;
   willReRegister: number;
   unregistered: number;
+  /** Phones whose CMG primary is a selected server and that are already on a backup (outage in progress). */
+  failedOver: number;
   details: SimulationDetail[];
   trunkImpact?: TrunkImpact;
   gatewayImpact?: GatewayImpact;
@@ -78,6 +88,7 @@ export interface SimulationDetail {
   noImpact: number;
   willReRegister: number;
   unregistered: number;
+  failedOver: number;
   movements: PhoneMovement[];
   subnetImpacts?: SubnetImpact[];
 }
@@ -86,7 +97,7 @@ export interface PhoneMovement {
   phoneName: string;
   currentServer: string | null;
   newServer: string | null;
-  impact: "no_change" | "re_register" | "unregistered";
+  impact: PhoneImpactKind;
   ipAddress?: string;
   subnetName?: string;
 }
@@ -98,6 +109,7 @@ export interface SubnetImpact {
   noImpact: number;
   willReRegister: number;
   unregistered: number;
+  failedOver: number;
 }
 
 export interface TrunkMovement {
@@ -144,7 +156,7 @@ export interface PhoneImpact {
   cmGroupName: string;
   currentServer: string | null;
   newServer: string | null;
-  impact: "no_change" | "re_register" | "unregistered";
+  impact: PhoneImpactKind;
 }
 
 export interface PhoneStatusMember {
