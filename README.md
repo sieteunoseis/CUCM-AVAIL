@@ -5,6 +5,7 @@ Real-time visibility into Cisco Unified Communications Manager (CUCM) phone regi
 ![Node.js](https://img.shields.io/badge/Node.js-22-green)
 ![Docker](https://img.shields.io/badge/Docker-Ready-blue)
 ![License](https://img.shields.io/badge/License-MIT-yellow)
+[![Skills](https://img.shields.io/badge/skills.sh-cucm--avail--mcp-blue)](https://skills.sh/sieteunoseis/CUCM-AVAIL)
 
 ## Screenshots
 
@@ -225,7 +226,13 @@ claude mcp add --transport http cucm-avail https://your-host/mcp
 claude mcp add --transport http cucm-avail https://your-host/mcp --header "Authorization: Bearer $MCP_API_KEY"
 ```
 
-A Claude Code skill describing the tools and common workflows (planned outage, upgrade order, CER/911 subnet coverage) is in [`skills/cucm-avail-mcp`](skills/cucm-avail-mcp/SKILL.md). Install it with `cp -r skills/cucm-avail-mcp ~/.claude/skills/`.
+### AI Agent Skills
+
+A skill describing the MCP tools and common workflows (planned outage, upgrade order, CER/911 subnet coverage) lives in [`skills/cucm-avail-mcp`](skills/cucm-avail-mcp/SKILL.md):
+
+```bash
+npx skills add sieteunoseis/CUCM-AVAIL
+```
 
 ## Tech Stack
 
