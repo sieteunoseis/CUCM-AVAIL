@@ -1,6 +1,6 @@
 {
   "name": "cucm-availability-dashboard",
-  "version": "1.8.5",
+  "version": "1.9.0",
   "description": "Dashboard to visualize CUCM Call Manager Group failover impact",
   "type": "module",
   "scripts": {
@@ -14,6 +14,7 @@
     "docker:run": "docker run -p 3000:3000 --env-file .env -v cucm-data:/data cucm-availability"
   },
   "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
     "better-sqlite3": "^11.0.0",
     "cisco-axl": "^1.4.1",
     "cisco-risport": "^1.4.0",
@@ -22,7 +23,8 @@
     "dotenv": "^16.4.0",
     "express": "^4.21.0",
     "node-cron": "^3.0.3",
-    "socket.io": "^4.7.0"
+    "socket.io": "^4.7.0",
+    "zod": "^4.6.7"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.0",

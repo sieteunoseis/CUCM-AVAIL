@@ -204,6 +204,26 @@ npm start
 | `POLL_INTERVAL` | No | `1440` | RISPort poll interval in minutes |
 | `ENABLE_GATEWAYS` | No | `false` | Enable MGCP gateway monitoring |
 | `DEMO_MODE` | No | `false` | Seed sample data, disable all CUCM calls |
+| `CER_PUB` | No | — | Cisco Emergency Responder publisher (enables Sync CER and the subnet cross-reference) |
+| `CER_USERNAME` | No | — | CER account with the API role |
+| `CER_PASSWORD` | No | — | CER password |
+| `MCP_API_KEY` | No | — | If set, `/mcp` requires `Authorization: Bearer <key>` and the action tools are enabled |
+
+## MCP Endpoint
+
+The app serves a [Model Context Protocol](https://modelcontextprotocol.io) endpoint at `/mcp` (Streamable HTTP, stateless), so AI clients can query it directly.
+
+**Read tools** (always on): `cucm_servers`, `cucm_cm_groups`, `cucm_availability_groups`, `cucm_device_pools`, `cucm_registration_summary`, `cucm_simulate_outage` (take servers down by name and see the phone/trunk/gateway impact), `cucm_phone_status`, `cucm_upgrade_plan`, `cucm_subnets` (with CER status), `cucm_unmapped_phones`, `cucm_trunks`.
+
+**Action tools** (only when `MCP_API_KEY` is set): `cucm_poll_risport`, `cucm_sync_axl`, `cucm_sync_cer`, `cucm_import_cer_subnets`, `cucm_replace_with_cer`.
+
+Claude Code:
+
+```bash
+claude mcp add --transport http cucm-avail https://your-host/mcp
+# with a key:
+claude mcp add --transport http cucm-avail https://your-host/mcp --header "Authorization: Bearer $MCP_API_KEY"
+```
 
 ## Tech Stack
 
