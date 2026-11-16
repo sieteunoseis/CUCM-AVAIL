@@ -116,6 +116,20 @@ const sections: Section[] = [
           </ul>
           <p>Scraping runs in the background. Progress shows in the status bar at the bottom.</p>
         </div>
+        <div className="space-y-2">
+          <H4>Subnet Table</H4>
+          <p>One row per defined subnet with its phone count. Click a row to expand its CM group breakdown (and its CER subnet, when CER is enabled). The header counts phones mapped to a subnet, phones with an IP outside every subnet, phones with no IP (not registered and no last-known IP), and phones sharing an IP with others (e.g. Expressway/MRA), which are left out of the mapping.</p>
+        </div>
+        <div className="space-y-2">
+          <H4>CER Cross-Reference (optional)</H4>
+          <p>Set <C>CER_PUB</C>, <C>CER_USERNAME</C> and <C>CER_PASSWORD</C> to enable it; the account needs the CER API role. Use <C>Sync CER</C> on the Dashboard to pull CER's IPv4 subnets (non-trackable ones are ignored). Each subnet then shows:</p>
+          <ul className="list-none space-y-1 ml-2">
+            <li><span className="text-noc-green">✓</span> — CER has the exact same subnet (shows its ERL)</li>
+            <li><span className="text-noc-amber">⚠</span> — CER covers it with a different mask. <C>Use CER</C> replaces ours with CER's overlapping subnets that contain phones</li>
+            <li><span className="text-noc-red">✗ missing</span> — no CER subnet overlaps it</li>
+          </ul>
+          <p>Unmapped phones are grouped by the CER subnet that contains them, ready to <C>Import</C> (name = ERL, description = CER location). Phones no CER subnet covers are listed as 911 gaps. CER subnets wider than /22 are marked broad and skipped by the bulk actions. Sync CER never changes your subnets on its own.</p>
+        </div>
       </div>
     ),
   },

@@ -41,6 +41,7 @@ export async function syncCer(): Promise<{ subnets: number; skippedNontrackable:
   } catch (e) {
     const msg = (e as Error).message;
     recordCerSyncError(msg);
+    invalidateCache("subnet:");
     console.error(`[CER] Sync failed: ${msg}`);
     throw e;
   }

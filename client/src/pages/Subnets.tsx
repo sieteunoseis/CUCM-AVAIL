@@ -1,14 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { io, type Socket } from "socket.io-client";
 import { api } from "../api/client";
-import type { Subnet, SubnetDistribution } from "../api/client";
-import { useSort, ColHeader } from "../components/TableHeader";
+import type { Subnet } from "../api/client";
+import SubnetOverview from "../components/SubnetOverview";
 
 const SOCKET_URL = import.meta.env.DEV ? "http://localhost:3000" : "";
 
 export default function Subnets() {
-  const [subnets, setSubnets] = useState<Subnet[]>([]);
-  const [distribution, setDistribution] = useState<SubnetDistribution | null>(null);
+  const [version, setVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [cidr, setCidr] = useState("");
   const [name, setName] = useState("");
@@ -29,12 +28,7 @@ export default function Subnets() {
 
   const fetchData = async () => {
     try {
-      const [s, d] = await Promise.all([
-        api.getSubnets(),
-        api.getSubnetDistribution(),
-      ]);
-      setSubnets(s);
-      setDistribution(d);
+      setVersion((v) => v + 1);
     } catch (e) {
       console.error(e);
     } finally {
@@ -524,141 +518,8 @@ export default function Subnets() {
         </div>
       </div>
 
-      {/* Subnet List */}
-      {subnets.length > 0 && (
-        <SubnetTable
-          subnets={subnets}
-          distribution={distribution}
-          onEdit={handleEdit}
-          onDelete={handleDelete}
-        />
-      )}
-
-      {/* Distribution Summary */}
-      {distribution && distribution.subnets.length > 0 && (
-        <div className="border border-noc-border bg-noc-surface overflow-hidden pane-resize">
-          <div className="tmux-title text-noc-green flex items-center justify-between">
-            <span>Phone Distribution by Subnet</span>
-            <span className="font-mono text-[10px] text-noc-text-dim normal-case tracking-normal">
-              {distribution.unmapped} phones unmapped
-            </span>
-          </div>
-          <div className="divide-y divide-noc-border/50">
-            {distribution.subnets.map((s) => (
-              <div key={s.cidr} className="px-4 py-3">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-sm font-medium text-noc-text-bright">
-                      {s.subnetName}
-                    </span>
-                    <span className="font-mono text-xs text-noc-text-dim">
-                      {s.cidr}
-                    </span>
-                  </div>
-                  <span className="font-mono text-sm text-noc-amber font-semibold">
-                    {s.count} phones
-                  </span>
-                </div>
-                <div className="flex flex-wrap gap-px">
-                  {Object.entries(s.cmGroups)
-                    .sort(([, a], [, b]) => b - a)
-                    .map(([cmg, count]) => (
-                      <span
-                        key={cmg}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1 bg-noc-bg border border-noc-border/50 font-mono text-[10px]"
-                      >
-                        <span className="text-noc-text-dim">{cmg}</span>
-                        <span className="text-noc-cyan font-semibold">{count}</span>
-                      </span>
-                    ))}
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-type SubnetSortKey = "cidr" | "name" | "description" | "phones";
-
-function SubnetTable({
-  subnets,
-  distribution,
-  onEdit,
-  onDelete,
-}: {
-  subnets: Subnet[];
-  distribution: SubnetDistribution | null;
-  onEdit: (s: Subnet) => void;
-  onDelete: (id: number) => void;
-}) {
-  const { sort, toggle, sorted } = useSort<SubnetSortKey>();
-
-  const accessor = (s: Subnet, key: SubnetSortKey): string | number => {
-    switch (key) {
-      case "cidr": return s.cidr;
-      case "name": return s.name;
-      case "description": return s.description || "";
-      case "phones": return distribution?.subnets.find((d) => d.subnetId === s.id)?.count || 0;
-    }
-  };
-
-  const rows = sorted(subnets, accessor);
-
-  return (
-    <div className="border border-noc-border bg-noc-surface overflow-hidden pane-resize">
-      <div className="tmux-title text-noc-cyan">
-        Defined Subnets ({subnets.length})
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
-          <thead>
-            <tr className="border-b border-noc-border text-noc-text-dim">
-              <ColHeader label="CIDR" sortKey="cidr" sort={sort} onSort={toggle} />
-              <ColHeader label="Name" sortKey="name" sort={sort} onSort={toggle} />
-              <ColHeader label="Description" sortKey="description" sort={sort} onSort={toggle} />
-              <ColHeader label="Phones" sortKey="phones" sort={sort} onSort={toggle} align="right" />
-              <ColHeader label="Actions" sort={null} align="right" resizable={false} />
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((s, i) => {
-              const dist = distribution?.subnets.find((d) => d.subnetId === s.id);
-              return (
-                <tr
-                  key={s.id}
-                  className={`border-b border-noc-border/50 hover:bg-noc-panel/50 transition-colors ${
-                    i % 2 === 0 ? "bg-noc-surface" : "bg-noc-bg/30"
-                  }`}
-                >
-                  <td className="px-4 py-2.5 font-mono text-noc-cyan truncate">{s.cidr}</td>
-                  <td className="px-4 py-2.5 font-mono font-medium text-noc-text-bright truncate">{s.name}</td>
-                  <td className="px-4 py-2.5 font-mono text-noc-text-dim truncate">{s.description || "—"}</td>
-                  <td className="px-4 py-2.5 text-right font-mono text-noc-amber font-semibold">{dist?.count || 0}</td>
-                  <td className="px-4 py-2.5 text-right">
-                    <div className="flex items-center justify-end gap-2">
-                      <button
-                        onClick={() => onEdit(s)}
-                        className="px-2 py-0.5 border border-noc-border text-[10px] font-mono uppercase tracking-widest text-noc-text-dim hover:text-noc-text hover:border-noc-border-bright transition-all cursor-pointer"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => onDelete(s.id)}
-                        className="px-2 py-0.5 border border-noc-red/20 text-[10px] font-mono uppercase tracking-widest text-noc-red/60 hover:text-noc-red hover:border-noc-red/40 transition-all cursor-pointer"
-                      >
-                        Del
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      {/* Subnets + CER cross-reference + unmapped phones */}
+      <SubnetOverview version={version} onEdit={handleEdit} onDelete={handleDelete} onChanged={fetchData} />
     </div>
   );
 }

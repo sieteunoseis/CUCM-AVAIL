@@ -450,8 +450,40 @@ export interface ReportSummary {
   models: { model: string; count: number }[];
 }
 
+export interface CerStatus {
+  enabled: boolean;
+  lastSuccess: string | null;
+  subnetCount: number;
+  skippedNontrackable: number;
+  lastError: string;
+  lastAttempt: string | null;
+}
+
+export type CerMatchStatus = "match" | "mismatch" | "missing";
+
+export interface SubnetOverview {
+  cer: CerStatus | null;
+  totals: { phones: number; mapped: number; noIp: number; sharedIp: number; unmappedWithIp: number };
+  subnets: {
+    id: number;
+    cidr: string;
+    name: string;
+    description: string;
+    phones: number;
+    cmGroups: Record<string, number>;
+    cerStatus?: CerMatchStatus;
+    cer?: { cidr: string; erlName: string; location: string; broad: boolean }[];
+    replaceWith?: string[];
+  }[];
+  unmapped: {
+    inCer: { cidr: string; erlName: string; location: string; phones: number; broad: boolean }[];
+    notInCer: { cidr: string; phones: number }[];
+  };
+}
+
 export interface FeatureFlags {
   enableGateways: boolean;
+  enableCer: boolean;
   [key: string]: boolean;
 }
 
@@ -569,6 +601,18 @@ export const api = {
 
   // Feature Flags
   getFeatures: () => get<FeatureFlags>("/api/features"),
+
+  // CER
+  syncCer: () => post<{ subnets: number; skippedNontrackable: number }>("/api/cer/sync"),
+  getCerStatus: () => get<CerStatus>("/api/cer/status"),
+  getSubnetOverview: () => get<SubnetOverview>("/api/subnets/overview"),
+  importCerSubnets: (cidrs: string[]) =>
+    post<{ created: number; skipped: number; errors: string[] }>("/api/subnets/import-cer", { cidrs }),
+  replaceWithCer: (subnetIds: number[]) =>
+    post<{ replaced: number; created: number; skipped: number; refused: { id: number; reason: string }[]; errors: string[] }>(
+      "/api/subnets/replace-cer",
+      { subnetIds },
+    ),
 
   // Gateways
   getGateways: () => get<GatewaysResponse>("/api/gateways"),

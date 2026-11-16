@@ -58,6 +58,28 @@ export default function Dashboard() {
     return () => { socket.disconnect(); };
   }, []);
 
+  const [cerEnabled, setCerEnabled] = useState(false);
+  const [syncingCer, setSyncingCer] = useState(false);
+  const [cerMsg, setCerMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    api.getFeatures().then((f) => setCerEnabled(!!f.enableCer)).catch(() => {});
+  }, []);
+
+  const handleSyncCer = async () => {
+    setSyncingCer(true);
+    setCerMsg(null);
+    try {
+      const r = await api.syncCer();
+      setCerMsg({ ok: true, text: `CER: ${r.subnets.toLocaleString()} subnets` });
+    } catch {
+      const status = await api.getCerStatus().catch(() => null);
+      setCerMsg({ ok: false, text: `CER sync failed${status?.lastError ? `: ${status.lastError}` : ""}` });
+    } finally {
+      setSyncingCer(false);
+    }
+  };
+
   const handleSync = async () => {
     setSyncing(true);
     try {
@@ -190,6 +212,21 @@ export default function Dashboard() {
           >
             {syncing ? "Syncing..." : "Sync AXL"}
           </button>
+          {cerEnabled && (
+            <button
+              onClick={handleSyncCer}
+              disabled={syncingCer}
+              title={cerMsg?.text}
+              className="px-4 py-1.5 border border-noc-border bg-noc-panel text-xs font-mono uppercase tracking-widest text-noc-text hover:border-noc-green/50 hover:text-noc-green transition-all disabled:opacity-50 cursor-pointer"
+            >
+              {syncingCer ? "Syncing CER..." : "Sync CER"}
+            </button>
+          )}
+          {cerMsg && (
+            <span className={`font-mono text-[10px] ${cerMsg.ok ? "text-noc-green" : "text-noc-red"}`} data-testid="cer-sync-msg">
+              {cerMsg.text}
+            </span>
+          )}
         </div>
       </div>
 
