@@ -56,6 +56,7 @@ const sections: Section[] = [
         <div className="space-y-2">
           <H4>Comparing CM Groups</H4>
           <p>Click a CMG row to select it. Every other row is marked <span className="text-noc-green">✓ safe</span> (shares no servers) or <span className="text-noc-red">✗ shares …</span> (lists the shared servers, which are also outlined in the grid). Click a second row to get a one-line verdict for that pair. Click the selected row again, or Clear, to reset.</p>
+          <p>With a selection, <strong>Device Pools in Blast Radius</strong> below the matrix lists the pools on the selected CMG(s) and the pools on other CMGs that share any of their servers (with the shared servers), plus totals for pools and phones not impacted. Pools with no phones are dimmed — trunks or gateways may still use them.</p>
           <div className="border border-noc-red/20 bg-noc-red/5 p-3 mt-2">
             <div className="font-mono text-[10px] text-noc-red uppercase tracking-widest mb-2">Why this matters</div>
             <p className="text-xs">A safe pair can be upgraded or lose every server on one side while the other keeps running. For split-room redundancy (e.g. call center side A/B), phones on each side must be in CMGs that are a safe pair.</p>

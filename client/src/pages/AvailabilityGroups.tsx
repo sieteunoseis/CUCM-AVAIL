@@ -1,9 +1,9 @@
 import { useState, useEffect } from "react";
 import { api } from "../api/client";
-import type { CmGroup } from "../api/client";
+import type { CmGroup, DevicePoolInfo } from "../api/client";
 import type { SortState } from "../components/TableHeader";
 import { shortName } from "../lib/hostname";
-import { sharedServers } from "../lib/agCompare";
+import { sharedServers, classifyPools } from "../lib/agCompare";
 import { AgBadge, useAvailabilityGroups } from "../components/AgBadge";
 
 export default function AvailabilityGroups() {
@@ -269,6 +269,104 @@ function CmgMatrix({ cmGroups }: { cmGroups: CmGroup[] }) {
           </table>
         </div>
       </div>
+
+      {selected && (
+        <PoolBlastRadius
+          cmGroups={cmGroups}
+          selectedNames={[selected.name, ...(compare ? [compare.name] : [])]}
+          cmgToAg={cmgToAg}
+        />
+      )}
     </>
+  );
+}
+
+const fmt = (n: number) => n.toLocaleString();
+
+function PoolBlastRadius({
+  cmGroups,
+  selectedNames,
+  cmgToAg,
+}: {
+  cmGroups: CmGroup[];
+  selectedNames: string[];
+  cmgToAg: Map<string, string>;
+}) {
+  const [pools, setPools] = useState<DevicePoolInfo[] | null>(null);
+
+  useEffect(() => {
+    api.getDevicePools().then(setPools).catch(() => setPools([]));
+  }, []);
+
+  if (!pools) {
+    return (
+      <div className="border border-noc-border bg-noc-surface px-4 py-3 font-mono text-xs text-noc-text-dim">
+        Loading device pools...
+      </div>
+    );
+  }
+
+  const { onSelected, alsoImpacted, notImpacted } = classifyPools(pools, cmGroups, selectedNames);
+  const phones = (list: { phone_count: number }[]) => list.reduce((s, p) => s + p.phone_count, 0);
+
+  const table = (rows: (DevicePoolInfo & { shared?: string[] })[], showShared: boolean, testId: string) => (
+    <table className="w-full text-xs font-mono" style={{ tableLayout: "fixed" }} data-testid={testId}>
+      <colgroup>
+        <col style={{ width: "28%" }} />
+        <col style={{ width: "20%" }} />
+        <col style={{ width: "10%" }} />
+        <col style={{ width: "10%" }} />
+        <col style={{ width: "32%" }} />
+      </colgroup>
+      <thead>
+        <tr className="border-b border-noc-border bg-noc-panel/50 text-[10px] uppercase tracking-widest text-noc-text-dim">
+          <th className="text-left px-4 py-2 font-medium">Device Pool</th>
+          <th className="text-left px-2 py-2 font-medium">CMG</th>
+          <th className="text-left px-2 py-2 font-medium">AG</th>
+          <th className="text-right px-2 py-2 font-medium">Phones</th>
+          <th className="text-left py-2 font-medium" style={{ paddingLeft: "1.5rem" }}>{showShared ? "Shared servers" : ""}</th>
+        </tr>
+      </thead>
+      <tbody>
+        {rows.length === 0 ? (
+          <tr>
+            <td colSpan={5} className="px-4 py-2.5 text-noc-text-dim">None</td>
+          </tr>
+        ) : (
+          rows.map((p) => (
+            <tr key={p.id} className={`border-b border-noc-border/30 ${p.phone_count === 0 ? "opacity-50" : ""}`}>
+              <td className="px-4 py-2 text-noc-text-bright">{p.name}</td>
+              <td className="px-2 py-2 text-noc-text">{p.cm_group_name}</td>
+              <td className="px-2 py-2">
+                {cmgToAg.has(p.cm_group_name) ? <AgBadge label={cmgToAg.get(p.cm_group_name)!} /> : <span className="text-noc-border">·</span>}
+              </td>
+              <td className="px-2 py-2 text-right text-noc-text-bright">{fmt(p.phone_count)}</td>
+              <td className="py-2 text-noc-red truncate" style={{ paddingLeft: "1.5rem" }} title={p.shared?.join(", ")}>{showShared ? p.shared?.join(", ") : ""}</td>
+            </tr>
+          ))
+        )}
+      </tbody>
+    </table>
+  );
+
+  return (
+    <div className="border border-noc-border bg-noc-surface overflow-hidden" data-testid="pool-blast">
+      <div className="tmux-title text-noc-cyan">Device Pools in Blast Radius</div>
+      <div className="px-4 py-2.5 font-mono text-xs border-b border-noc-border" data-testid="pool-blast-summary">
+        <span className="text-noc-cyan">{onSelected.length} pools · {fmt(phones(onSelected))} phones on selected</span>
+        <span className="text-noc-border"> · </span>
+        <span className="text-noc-red">{alsoImpacted.length} pools · {fmt(phones(alsoImpacted))} phones also impacted</span>
+        <span className="text-noc-border"> · </span>
+        <span className="text-noc-green">{notImpacted.length} pools · {fmt(phones(notImpacted))} phones not impacted</span>
+      </div>
+      <div className="px-4 pt-3 pb-1 font-mono text-[10px] uppercase tracking-widest text-noc-cyan">
+        On selected groups ({selectedNames.join(", ")})
+      </div>
+      {table(onSelected, false, "pool-on-selected")}
+      <div className="px-4 pt-4 pb-1 font-mono text-[10px] uppercase tracking-widest text-noc-red">
+        Also impacted (shared servers)
+      </div>
+      {table(alsoImpacted, true, "pool-also-impacted")}
+    </div>
   );
 }
