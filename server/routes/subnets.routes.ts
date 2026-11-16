@@ -7,6 +7,7 @@ import {
   getPhonesWithIps,
   getCerSubnets,
   getPhonesForSubnetOverview,
+  replaceSubnetWithCer,
 } from "../db/queries.js";
 import { buildOverview, type CerSubnet } from "../utils/cer.js";
 import { config } from "../config.js";
@@ -384,12 +385,14 @@ router.post("/replace-cer", (req, res) => {
       refused.push({ id, reason: "no overlapping CER subnet has phones" });
       continue;
     }
-    deleteSubnet(id);
-    const r = importCidrs(targets);
-    replaced++;
-    created += r.created;
-    skipped += r.skipped;
-    errors.push(...r.errors);
+    try {
+      const r = replaceSubnetWithCer(id, targets);
+      replaced++;
+      created += r.created;
+      skipped += r.skipped;
+    } catch (e: any) {
+      errors.push(`${row.cidr}: ${e.message} (kept)`);
+    }
   }
   invalidateCache("subnet:");
   res.json({ replaced, created, skipped, refused, errors });

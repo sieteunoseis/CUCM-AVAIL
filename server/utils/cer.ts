@@ -25,11 +25,14 @@ export function maskToBits(mask: string): number | null {
 
 /** Normalize one page of GET /cerappservices/service/v1/ipsubnet (JSON). */
 export function normalizeCerPage(json: any): {
+  valid: boolean;
   subnets: CerSubnet[];
   skippedNontrackable: number;
   count: number;
   returned: number;
 } {
+  // A real page always carries subnetDetails and paging; anything else (e.g. {"status":"Access Denied"}) is not data.
+  const valid = !!json && typeof json === "object" && !!json.subnetDetails && !!json.paging;
   const raw = arr<any>(json?.subnetDetails?.ipv4Subnets?.subnet);
   const subnets: CerSubnet[] = [];
   let skippedNontrackable = 0;
@@ -48,7 +51,37 @@ export function normalizeCerPage(json: any): {
     subnets.push({ cidr: `${network}/${bits}`, subnetId, mask, erlName: str(s?.erlName), location: str(s?.location) });
   }
   const count = parseInt(str(json?.paging?.count), 10);
-  return { subnets, skippedNontrackable, count: Number.isFinite(count) ? count : raw.length, returned: raw.length };
+  return { valid, subnets, skippedNontrackable, count: Number.isFinite(count) ? count : raw.length, returned: raw.length };
+}
+
+/**
+ * Read every page via fetchPage(offset). Throws (so callers keep old data) when a page
+ * is not real data, when paging ends before `count`, or when CER suddenly reports 0
+ * subnets although the last good sync had some.
+ */
+export async function pageThrough(
+  fetchPage: (offset: number) => Promise<any>,
+  pageSize: number,
+  previousCount = 0,
+): Promise<{ subnets: CerSubnet[]; skippedNontrackable: number }> {
+  const subnets: CerSubnet[] = [];
+  let skippedNontrackable = 0;
+  let offset = 0;
+  let count = 0;
+  for (let guard = 0; guard < 200; guard++) {
+    const page = normalizeCerPage(await fetchPage(offset));
+    if (!page.valid) throw new Error("CER returned an unexpected response (no subnetDetails/paging)");
+    count = page.count;
+    subnets.push(...page.subnets);
+    skippedNontrackable += page.skippedNontrackable;
+    offset += page.returned;
+    if (page.returned === 0 || offset >= count || page.returned < pageSize) break;
+  }
+  if (offset < count) throw new Error(`CER paging incomplete: got ${offset} of ${count} subnets`);
+  if (offset === 0 && previousCount > 0) {
+    throw new Error(`CER returned 0 subnets (last sync had ${previousCount}); keeping previous data`);
+  }
+  return { subnets, skippedNontrackable };
 }
 
 type Parsed<T> = { row: T; network: number; mask: number; bits: number };
@@ -63,10 +96,38 @@ function parseAll<T extends { cidr: string }>(rows: T[]): Parsed<T>[] {
   return out;
 }
 
-function longestMatch<T>(ip: number, list: Parsed<T>[]): Parsed<T> | null {
-  let best: Parsed<T> | null = null;
-  for (const s of list) if ((ip & s.mask) === s.network && (!best || s.bits > best.bits)) best = s;
-  return best;
+/** Index subnets by prefix length so an IP needs at most 33 lookups. */
+type PrefixIndex<T> = { bits: number[]; byBits: Map<number, Map<number, Parsed<T>>> };
+
+function indexByPrefix<T>(list: Parsed<T>[]): PrefixIndex<T> {
+  const byBits = new Map<number, Map<number, Parsed<T>>>();
+  for (const s of list) {
+    let m = byBits.get(s.bits);
+    if (!m) byBits.set(s.bits, (m = new Map()));
+    const key = s.network >>> 0;
+    if (!m.has(key)) m.set(key, s);
+  }
+  return { bits: [...byBits.keys()].sort((a, b) => b - a), byBits };
+}
+
+const maskFor = (bits: number) => (bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0);
+
+/** All subnets containing ip, most specific first. */
+function containing<T>(ip: number, idx: PrefixIndex<T>): Parsed<T>[] {
+  const out: Parsed<T>[] = [];
+  for (const b of idx.bits) {
+    const hit = idx.byBits.get(b)!.get((ip & maskFor(b)) >>> 0);
+    if (hit) out.push(hit);
+  }
+  return out;
+}
+
+function longestMatch<T>(ip: number, idx: PrefixIndex<T>): Parsed<T> | null {
+  for (const b of idx.bits) {
+    const hit = idx.byBits.get(b)!.get((ip & maskFor(b)) >>> 0);
+    if (hit) return hit;
+  }
+  return null;
 }
 
 function overlaps(a: { network: number; mask: number }, b: { network: number; mask: number }): boolean {
@@ -103,6 +164,8 @@ export function buildOverview(input: {
   const { appSubnets, cerSubnets, phones } = input;
   const app = parseAll(appSubnets);
   const cer = cerSubnets ? parseAll(cerSubnets) : [];
+  const appIdx = indexByPrefix(app);
+  const cerIdx = indexByPrefix(cer);
 
   // Shared IPs (Expressway/MRA etc.): an IP seen on more than one phone.
   const ipCount = new Map<string, number>();
@@ -128,12 +191,12 @@ export function buildOverview(input: {
       continue;
     }
     const long = ipToLong(ip);
-    const cerHit = cerSubnets ? longestMatch(long, cer) : null;
-    if (cerHit) cerHasPhone.add(cerHit.row.cidr);
-    // Any containing CER subnet "contains a phone" for replace purposes.
-    if (cerSubnets) for (const c of cer) if ((long & c.mask) === c.network) cerHasPhone.add(c.row.cidr);
+    // Every containing CER subnet "contains a phone" for replace purposes; the first is the most specific.
+    const cerHits = cerSubnets ? containing(long, cerIdx) : [];
+    for (const c of cerHits) cerHasPhone.add(c.row.cidr);
+    const cerHit = cerHits[0] ?? null;
 
-    const appHit = longestMatch(long, app);
+    const appHit = longestMatch(long, appIdx);
     if (appHit) {
       totals.mapped++;
       const entry = perSubnet.get(appHit.row.id) || { phones: 0, cmGroups: {} };

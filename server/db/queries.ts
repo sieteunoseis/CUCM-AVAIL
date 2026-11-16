@@ -926,3 +926,30 @@ export function getPhonesForSubnetOverview(): { ip: string | null; cm_group_name
     )
     .all() as any;
 }
+
+/**
+ * Atomically replace one app subnet with CER subnets: delete ours and insert each
+ * target (name = ERL, description = CER location). Any failure rolls everything back.
+ */
+export function replaceSubnetWithCer(subnetId: number, targets: string[]): { created: number; skipped: number } {
+  const db = getDb();
+  const cerRow = db.prepare("SELECT cidr, erl_name, location FROM cer_subnets WHERE cidr = ?");
+  const exists = db.prepare("SELECT 1 FROM subnets WHERE cidr = ?");
+  const insert = db.prepare("INSERT INTO subnets (cidr, name, description) VALUES (?, ?, ?)");
+  return db.transaction(() => {
+    db.prepare("DELETE FROM subnets WHERE id = ?").run(subnetId);
+    let created = 0;
+    let skipped = 0;
+    for (const cidr of targets) {
+      const c = cerRow.get(cidr) as { cidr: string; erl_name: string; location: string } | undefined;
+      if (!c) throw new Error(`${cidr}: not in CER`);
+      if (exists.get(cidr)) {
+        skipped++;
+        continue;
+      }
+      insert.run(cidr, c.erl_name || cidr, c.location || "Imported from CER");
+      created++;
+    }
+    return { created, skipped };
+  })();
+}

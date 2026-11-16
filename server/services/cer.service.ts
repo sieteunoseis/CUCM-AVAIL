@@ -1,32 +1,32 @@
 import { config } from "../config.js";
-import { normalizeCerPage, type CerSubnet } from "../utils/cer.js";
-import { replaceCerSubnets, recordCerSyncError } from "../db/queries.js";
+import { pageThrough, type CerSubnet } from "../utils/cer.js";
+import { replaceCerSubnets, recordCerSyncError, getCerSyncStatus } from "../db/queries.js";
 import { invalidateCache } from "./cache.service.js";
 
 const PAGE = 500;
+const TIMEOUT_MS = 30_000;
 
-/** Fetch every IPv4 subnet from CER (paged). Throws on any failed page. */
+/** Fetch every IPv4 subnet from CER (paged). Throws on any failed, odd or incomplete page. */
 export async function fetchCerSubnets(): Promise<{ subnets: CerSubnet[]; skippedNontrackable: number }> {
   const { host, username, password } = config.cer;
   const auth = "Basic " + Buffer.from(`${username}:${password}`).toString("base64");
-  const subnets: CerSubnet[] = [];
-  let skippedNontrackable = 0;
-  let offset = 0;
-  // Hard stop well above any real CER size, in case paging never ends.
-  for (let guard = 0; guard < 200; guard++) {
-    const url = `https://${host}/cerappservices/service/v1/ipsubnet?offset=${offset}&limit=${PAGE}`;
-    const res = await fetch(url, { headers: { Authorization: auth, Accept: "application/json" } });
-    if (!res.ok) {
-      const body = (await res.text()).slice(0, 200);
-      throw new Error(`CER returned ${res.status}${body ? `: ${body}` : ""}`);
-    }
-    const page = normalizeCerPage(await res.json());
-    subnets.push(...page.subnets);
-    skippedNontrackable += page.skippedNontrackable;
-    offset += page.returned;
-    if (page.returned === 0 || offset >= page.count) break;
-  }
-  return { subnets, skippedNontrackable };
+  const previous = getCerSyncStatus()?.last_success ? getCerSyncStatus()!.subnet_count : 0;
+  return pageThrough(
+    async (offset) => {
+      const url = `https://${host}/cerappservices/service/v1/ipsubnet?offset=${offset}&limit=${PAGE}`;
+      const res = await fetch(url, {
+        headers: { Authorization: auth, Accept: "application/json" },
+        signal: AbortSignal.timeout(TIMEOUT_MS),
+      });
+      if (!res.ok) {
+        const body = (await res.text()).slice(0, 200);
+        throw new Error(`CER returned ${res.status}${body ? `: ${body}` : ""}`);
+      }
+      return res.json();
+    },
+    PAGE,
+    previous,
+  );
 }
 
 /** Sync CER subnets into the local table. Leaves old data untouched on failure. */
@@ -39,10 +39,10 @@ export async function syncCer(): Promise<{ subnets: number; skippedNontrackable:
     console.log(`[CER] Synced ${subnets.length} subnets (${skippedNontrackable} non-trackable skipped)`);
     return { subnets: subnets.length, skippedNontrackable };
   } catch (e) {
-    const msg = (e as Error).message;
+    const msg = (e as Error).name === "TimeoutError" ? `CER did not answer within ${TIMEOUT_MS / 1000}s` : (e as Error).message;
     recordCerSyncError(msg);
     invalidateCache("subnet:");
     console.error(`[CER] Sync failed: ${msg}`);
-    throw e;
+    throw new Error(msg);
   }
 }
