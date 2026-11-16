@@ -225,6 +225,8 @@ claude mcp add --transport http cucm-avail https://your-host/mcp
 claude mcp add --transport http cucm-avail https://your-host/mcp --header "Authorization: Bearer $MCP_API_KEY"
 ```
 
+A Claude Code skill describing the tools and common workflows (planned outage, upgrade order, CER/911 subnet coverage) is in [`skills/cucm-avail-mcp`](skills/cucm-avail-mcp/SKILL.md). Install it with `cp -r skills/cucm-avail-mcp ~/.claude/skills/`.
+
 ## Tech Stack
 
 - **Frontend**: React 19, Tailwind CSS 4, Vite 8, Socket.IO Client
