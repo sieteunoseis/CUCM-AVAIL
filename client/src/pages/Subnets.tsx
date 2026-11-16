@@ -1,7 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import { io, type Socket } from "socket.io-client";
 import { api } from "../api/client";
-import type { Subnet } from "../api/client";
 import SubnetOverview from "../components/SubnetOverview";
 
 const SOCKET_URL = import.meta.env.DEV ? "http://localhost:3000" : "";
@@ -9,11 +8,6 @@ const SOCKET_URL = import.meta.env.DEV ? "http://localhost:3000" : "";
 export default function Subnets() {
   const [version, setVersion] = useState(0);
   const [loading, setLoading] = useState(true);
-  const [cidr, setCidr] = useState("");
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [editId, setEditId] = useState<number | null>(null);
-  const [error, setError] = useState("");
   const [discovered, setDiscovered] = useState<{ cidr: string; count: number; suggestedName: string }[]>([]);
   const [discovering, setDiscovering] = useState(false);
   const [showDiscover, setShowDiscover] = useState(false);
@@ -70,43 +64,6 @@ export default function Subnets() {
     };
   }, []);
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError("");
-    try {
-      if (editId) {
-        await api.updateSubnet(editId, cidr, name, description);
-      } else {
-        await api.createSubnet(cidr, name, description);
-      }
-      setCidr("");
-      setName("");
-      setDescription("");
-      setEditId(null);
-      await fetchData();
-    } catch (err: any) {
-      setError(err.message || "Failed to save subnet");
-    }
-  };
-
-  const handleEdit = (s: Subnet) => {
-    setEditId(s.id);
-    setCidr(s.cidr);
-    setName(s.name);
-    setDescription(s.description);
-  };
-
-  const handleDelete = async (id: number) => {
-    await api.deleteSubnet(id);
-    await fetchData();
-  };
-
-  const handleCancel = () => {
-    setEditId(null);
-    setCidr("");
-    setName("");
-    setDescription("");
-  };
 
   const handleDiscover = async () => {
     setDiscovering(true);
@@ -202,77 +159,8 @@ export default function Subnets() {
           Subnet Mapping
         </h1>
         <p className="text-xs text-noc-text-dim mt-1 font-mono">
-          Define subnets to map phone IP addresses to locations.
+          Define subnets to map phone IP addresses to locations. Add and edit subnets from the table below.
         </p>
-      </div>
-
-      {/* Add / Edit Form */}
-      <div className="border border-noc-border bg-noc-surface overflow-hidden">
-        <div className="tmux-title text-noc-amber">
-          {editId ? "Edit Subnet" : "Add Subnet"}
-        </div>
-        <form onSubmit={handleSubmit} className="p-4">
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-            <div>
-              <label className="block font-mono text-[10px] uppercase tracking-widest text-noc-text-dim mb-1.5">
-                CIDR
-              </label>
-              <input
-                type="text"
-                value={cidr}
-                onChange={(e) => setCidr(e.target.value)}
-                placeholder="10.0.1.0/24"
-                required
-                className="w-full px-3 py-2 border border-noc-border bg-noc-bg text-noc-text-bright font-mono text-sm focus:outline-none focus:border-noc-amber/50"
-              />
-            </div>
-            <div>
-              <label className="block font-mono text-[10px] uppercase tracking-widest text-noc-text-dim mb-1.5">
-                Name
-              </label>
-              <input
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Building A - Floor 2"
-                required
-                className="w-full px-3 py-2 border border-noc-border bg-noc-bg text-noc-text-bright font-mono text-sm focus:outline-none focus:border-noc-amber/50"
-              />
-            </div>
-            <div>
-              <label className="block font-mono text-[10px] uppercase tracking-widest text-noc-text-dim mb-1.5">
-                Description
-              </label>
-              <input
-                type="text"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
-                placeholder="Optional description"
-                className="w-full px-3 py-2 border border-noc-border bg-noc-bg text-noc-text-bright font-mono text-sm focus:outline-none focus:border-noc-amber/50"
-              />
-            </div>
-          </div>
-          {error && (
-            <p className="text-noc-red text-xs font-mono mt-3">{error}</p>
-          )}
-          <div className="flex gap-2 mt-3">
-            <button
-              type="submit"
-              className="px-4 py-1.5 border border-noc-amber/30 bg-noc-amber/10 text-xs font-mono uppercase tracking-widest text-noc-amber hover:bg-noc-amber/20 transition-all cursor-pointer"
-            >
-              {editId ? "Update" : "Add Subnet"}
-            </button>
-            {editId && (
-              <button
-                type="button"
-                onClick={handleCancel}
-                className="px-4 py-1.5 border border-noc-border text-xs font-mono uppercase tracking-widest text-noc-text-dim hover:text-noc-text transition-all cursor-pointer"
-              >
-                Cancel
-              </button>
-            )}
-          </div>
-        </form>
       </div>
 
       {/* Auto-Discover / Import */}
@@ -519,7 +407,7 @@ export default function Subnets() {
       </div>
 
       {/* Subnets + CER cross-reference + unmapped phones */}
-      <SubnetOverview version={version} onEdit={handleEdit} onDelete={handleDelete} onChanged={fetchData} />
+      <SubnetOverview version={version} onChanged={fetchData} />
     </div>
   );
 }

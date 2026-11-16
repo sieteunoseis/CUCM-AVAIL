@@ -1,6 +1,6 @@
 {
   "name": "cucm-availability-dashboard",
-  "version": "1.8.4",
+  "version": "1.8.5",
   "description": "Dashboard to visualize CUCM Call Manager Group failover impact",
   "type": "module",
   "scripts": {

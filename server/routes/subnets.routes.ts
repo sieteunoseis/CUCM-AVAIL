@@ -47,9 +47,18 @@ router.post("/", (req, res) => {
 // PUT update subnet
 router.put("/:id", (req, res) => {
   const { cidr, name, description } = req.body;
-  updateSubnet(parseInt(req.params.id, 10), cidr, name, description || "");
-  invalidateCache("subnet:");
-  res.json({ ok: true });
+  if (!cidr || !name) {
+    res.status(400).json({ error: "cidr and name are required" });
+    return;
+  }
+  try {
+    updateSubnet(parseInt(req.params.id, 10), cidr, name, description || "");
+    invalidateCache("subnet:");
+    res.json({ ok: true });
+  } catch (e: any) {
+    if (e.message?.includes("UNIQUE")) res.status(409).json({ error: "Subnet CIDR already exists" });
+    else res.status(500).json({ error: e.message });
+  }
 });
 
 // DELETE subnet

@@ -1,7 +1,7 @@
 import { useState, useEffect, Fragment } from "react";
-import { createPortal } from "react-dom";
+import Modal from "./Modal";
 import { api } from "../api/client";
-import type { Subnet, SubnetOverview as Overview, CerMatchStatus } from "../api/client";
+import type { SubnetOverview as Overview, CerMatchStatus } from "../api/client";
 import { useSort, ColHeader } from "./TableHeader";
 
 type Row = Overview["subnets"][number];
@@ -42,17 +42,20 @@ function CerBadge({ row }: { row: Row }) {
 const btn =
   "px-2 py-0.5 border text-[10px] font-mono uppercase tracking-widest transition-all cursor-pointer disabled:opacity-40 disabled:cursor-default";
 
-export default function SubnetOverview({
-  version,
-  onEdit,
-  onDelete,
-  onChanged,
-}: {
-  version: number;
-  onEdit: (s: Subnet) => void;
-  onDelete: (id: number) => void;
-  onChanged: () => void;
-}) {
+const IPV4_CIDR = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})\/(\d{1,2})$/;
+function cidrError(cidr: string): string {
+  const m = cidr.trim().match(IPV4_CIDR);
+  if (!m) return "CIDR must look like 10.0.1.0/24";
+  if (m.slice(1, 5).some((o) => Number(o) > 255) || Number(m[5]) > 32) return "CIDR has an octet over 255 or a prefix over /32";
+  return "";
+}
+
+type FormState = { id: number | null; cidr: string; name: string; description: string; error: string; saving: boolean };
+
+const input =
+  "w-full px-3 py-2 border border-noc-border bg-noc-bg text-noc-text-bright font-mono text-sm focus:outline-none focus:border-noc-amber/50";
+
+export default function SubnetOverview({ version, onChanged }: { version: number; onChanged: () => void }) {
   const [data, setData] = useState<Overview | null>(null);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState<Set<number>>(new Set());
@@ -64,17 +67,11 @@ export default function SubnetOverview({
     rows: { left: string; right: string }[];
     warning?: string;
     confirmLabel: string;
+    tone?: "amber" | "red";
     action: () => Promise<string>;
   } | null>(null);
+  const [form, setForm] = useState<FormState | null>(null);
   const { sort, toggle, sorted } = useSort<SortKey>();
-  useEffect(() => {
-    if (!pending) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setPending(null);
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [pending]);
 
   useEffect(() => {
     api.getSubnetOverview().then(setData).catch((e) => setError(String(e)));
@@ -169,7 +166,16 @@ export default function SubnetOverview({
     <>
       <div className="border border-noc-border bg-noc-surface overflow-hidden" data-testid="subnet-overview">
         <div className="tmux-title text-noc-cyan flex items-center justify-between">
-          <span>Subnets ({fmt(data.subnets.length)})</span>
+          <span className="flex items-center gap-3">
+            Subnets ({fmt(data.subnets.length)})
+            <button
+              onClick={() => setForm({ id: null, cidr: "", name: "", description: "", error: "", saving: false })}
+              className={`${btn} border-noc-amber/40 text-noc-amber normal-case`}
+              data-testid="add-subnet"
+            >
+              + Add subnet
+            </button>
+          </span>
           <span className="font-mono text-[10px] text-noc-text-dim normal-case tracking-normal" data-testid="subnet-totals">
             {fmt(t.mapped)} phones mapped · {fmt(t.unmappedWithIp)} unmapped · {fmt(t.noIp)} no IP · {fmt(t.sharedIp)} shared IP
           </span>
@@ -271,13 +277,24 @@ export default function SubnetOverview({
                             </button>
                           )}
                           <button
-                            onClick={() => onEdit({ id: s.id, cidr: s.cidr, name: s.name, description: s.description } as Subnet)}
+                            onClick={() => setForm({ id: s.id, cidr: s.cidr, name: s.name, description: s.description || "", error: "", saving: false })}
                             className={`${btn} border-noc-border text-noc-text-dim hover:text-noc-text hover:border-noc-border-bright`}
                           >
                             Edit
                           </button>
                           <button
-                            onClick={() => onDelete(s.id)}
+                            onClick={() =>
+                              setPending({
+                                title: "Delete subnet",
+                                tone: "red",
+                                rows: [{ left: `delete ${s.cidr} · ${s.name}`, right: s.phones ? `${fmt(s.phones)} phones fall to a wider subnet or become unmapped` : "no phones in it" }],
+                                confirmLabel: "Delete",
+                                action: async () => {
+                                  await api.deleteSubnet(s.id);
+                                  return `Deleted ${s.cidr}`;
+                                },
+                              })
+                            }
                             className={`${btn} border-noc-red/20 text-noc-red/60 hover:text-noc-red hover:border-noc-red/40`}
                           >
                             Del
@@ -392,35 +409,10 @@ export default function SubnetOverview({
           )}
         </div>
       )}
-      {pending &&
-        createPortal(
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
-          onClick={() => !busy && setPending(null)}
-          data-testid="confirm-backdrop"
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label={pending.title}
-            onClick={(e) => e.stopPropagation()}
-            className="w-full max-w-3xl border border-noc-amber/50 bg-noc-surface font-mono text-xs shadow-2xl"
-            data-testid="confirm-card"
-          >
-            <div className="px-4 py-2.5 border-b border-noc-amber/30 text-noc-amber uppercase tracking-widest text-[11px] font-semibold">
-              {pending.title}
-            </div>
-            <div className="max-h-[60vh] overflow-y-auto divide-y divide-noc-border/40">
-              {pending.rows.map((r, i) => (
-                <div key={i} className="px-4 py-2 flex flex-wrap gap-x-3">
-                  <span className="text-noc-text-bright">{r.left}</span>
-                  <span className="text-noc-border">→</span>
-                  <span className="text-noc-cyan">{r.right}</span>
-                </div>
-              ))}
-            </div>
-            {pending.warning && <div className="px-4 py-2 border-t border-noc-amber/30 text-noc-amber">⚠ {pending.warning}</div>}
-            <div className="px-4 py-2.5 border-t border-noc-amber/30 flex items-center justify-end gap-2">
+      {pending && (
+        <Modal title={pending.title} tone={pending.tone} onClose={() => setPending(null)} closeDisabled={busy} testId="confirm-card"
+          footer={
+            <>
               <button onClick={() => setPending(null)} disabled={busy} className={`${btn} border-noc-border text-noc-text-dim hover:text-noc-text`}>
                 Cancel
               </button>
@@ -433,15 +425,75 @@ export default function SubnetOverview({
                 }}
                 disabled={busy}
                 data-testid="confirm-card-ok"
-                className={`${btn} border-noc-amber/60 text-noc-amber bg-noc-amber/10`}
+                className={`${btn} ${pending.tone === "red" ? "border-noc-red/60 text-noc-red bg-noc-red/10" : "border-noc-amber/60 text-noc-amber bg-noc-amber/10"}`}
               >
                 {pending.confirmLabel}
               </button>
-            </div>
+            </>
+          }
+        >
+          <div className="max-h-[60vh] overflow-y-auto divide-y divide-noc-border/40">
+            {pending.rows.map((r, i) => (
+              <div key={i} className="px-4 py-2 flex flex-wrap gap-x-3">
+                <span className="text-noc-text-bright">{r.left}</span>
+                <span className="text-noc-border">→</span>
+                <span className="text-noc-cyan">{r.right}</span>
+              </div>
+            ))}
           </div>
-        </div>,
-          document.body,
-        )}
+          {pending.warning && <div className="px-4 py-2 border-t border-noc-amber/30 text-noc-amber">⚠ {pending.warning}</div>}
+        </Modal>
+      )}
+
+      {form && (
+        <Modal title={form.id ? `Edit subnet ${form.cidr}` : "Add subnet"} onClose={() => setForm(null)} closeDisabled={form.saving} testId="subnet-form">
+          <form
+            onSubmit={async (e) => {
+              e.preventDefault();
+              const bad = cidrError(form.cidr);
+              if (bad) return setForm({ ...form, error: bad });
+              if (!form.name.trim()) return setForm({ ...form, error: "Name is required" });
+              setForm({ ...form, saving: true, error: "" });
+              try {
+                if (form.id) await api.updateSubnet(form.id, form.cidr.trim(), form.name.trim(), form.description.trim());
+                else await api.createSubnet(form.cidr.trim(), form.name.trim(), form.description.trim());
+                const msg = form.id ? `Updated ${form.cidr.trim()}` : `Added ${form.cidr.trim()}`;
+                setForm(null);
+                setNotice(msg);
+                onChanged();
+              } catch (err) {
+                const m = String(err);
+                setForm({ ...form, saving: false, error: m.includes("409") ? "A subnet with that CIDR already exists" : `Save failed: ${m}` });
+              }
+            }}
+          >
+            <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3">
+              {(["cidr", "name", "description"] as const).map((f) => (
+                <label key={f} className="block">
+                  <span className="block font-mono text-[10px] uppercase tracking-widest text-noc-text-dim mb-1.5">{f}</span>
+                  <input
+                    value={form[f]}
+                    onChange={(e) => setForm({ ...form, [f]: e.target.value, error: "" })}
+                    placeholder={f === "cidr" ? "10.0.1.0/24" : f === "name" ? "Building A - Floor 2" : "Optional description"}
+                    autoFocus={form.id ? f === "name" : f === "cidr"}
+                    data-testid={`subnet-form-${f}`}
+                    className={input}
+                  />
+                </label>
+              ))}
+            </div>
+            {form.error && <p className="px-4 pb-2 text-noc-red text-xs font-mono" data-testid="subnet-form-error">{form.error}</p>}
+            <div className="px-4 py-2.5 border-t border-noc-amber/30 flex items-center justify-end gap-2">
+              <button type="button" onClick={() => setForm(null)} disabled={form.saving} className={`${btn} border-noc-border text-noc-text-dim hover:text-noc-text`}>
+                Cancel
+              </button>
+              <button type="submit" disabled={form.saving} data-testid="subnet-form-save" className={`${btn} border-noc-amber/60 text-noc-amber bg-noc-amber/10`}>
+                {form.saving ? "Saving..." : form.id ? "Save" : "Add subnet"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </>
   );
 }
