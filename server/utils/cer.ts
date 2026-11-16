@@ -186,16 +186,15 @@ export function buildOverview(input: {
       totals.noIp++;
       continue;
     }
-    if ((ipCount.get(ip) || 0) > 1) {
-      totals.sharedIp++;
-      continue;
-    }
     const long = ipToLong(ip);
-    // Every containing CER subnet "contains a phone" for replace purposes; the first is the most specific.
-    const cerHits = cerSubnets ? containing(long, cerIdx) : [];
+    const shared = (ipCount.get(ip) || 0) > 1;
+
+    // Shared IPs (Expressway/MRA) never feed CER replace/import suggestions.
+    const cerHits = cerSubnets && !shared ? containing(long, cerIdx) : [];
     for (const c of cerHits) cerHasPhone.add(c.row.cidr);
     const cerHit = cerHits[0] ?? null;
 
+    // A defined subnet that covers the IP claims the phone, shared or not (e.g. an Expressway /32).
     const appHit = longestMatch(long, appIdx);
     if (appHit) {
       totals.mapped++;
@@ -204,6 +203,10 @@ export function buildOverview(input: {
       const g = p.cmGroup || "Unknown";
       entry.cmGroups[g] = (entry.cmGroups[g] || 0) + 1;
       perSubnet.set(appHit.row.id, entry);
+      continue;
+    }
+    if (shared) {
+      totals.sharedIp++;
       continue;
     }
     totals.unmappedWithIp++;

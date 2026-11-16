@@ -127,6 +127,28 @@ assert.deepEqual(
   ["10.8.3.0/24", "10.9.1.0/24", "172.16.5.0/24"],
 );
 
+// --- v1.8.2: shared-IP phones (Expressway/MRA) count under a defined subnet that covers them ---
+{
+  const r = buildOverview({
+    appSubnets: [{ id: 9, cidr: "10.156.20.48/32", name: "psxMRACore01", description: "" }],
+    cerSubnets: [cer("10.156.20.0/24")],
+    phones: [
+      { ip: "10.156.20.48", cmGroup: "G1" },
+      { ip: "10.156.20.48", cmGroup: "G2" },
+      { ip: "10.156.20.48", cmGroup: "G1" },
+      { ip: "10.70.0.9", cmGroup: "G1" },
+      { ip: "10.70.0.9", cmGroup: "G1" },
+    ],
+  });
+  assert.equal(r.subnets[0].phones, 3);
+  assert.deepEqual(r.subnets[0].cmGroups, { G1: 2, G2: 1 });
+  assert.deepEqual(r.totals, { phones: 5, mapped: 3, noIp: 0, sharedIp: 2, unmappedWithIp: 0 });
+  // shared-IP phones never feed CER replace/import suggestions
+  assert.deepEqual(r.subnets[0].replaceWith, []);
+  assert.deepEqual(r.unmapped.inCer, []);
+  assert.deepEqual(r.unmapped.notInCer, []);
+}
+
 // --- Fix pass: unexpected bodies and truncated paging must not "succeed" ---
 assert.equal(normalizeCerPage({ status: "Access Denied" }).valid, false);
 assert.equal(normalizeCerPage({ subnetDetails: null, paging: { count: "0" } }).valid, false);

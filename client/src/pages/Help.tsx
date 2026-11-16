@@ -118,7 +118,7 @@ const sections: Section[] = [
         </div>
         <div className="space-y-2">
           <H4>Subnet Table</H4>
-          <p>One row per defined subnet with its phone count. Click a row to expand its CM group breakdown (and its CER subnet, when CER is enabled). The header counts phones mapped to a subnet, phones with an IP outside every subnet, phones with no IP (not registered and no last-known IP), and phones sharing an IP with others (e.g. Expressway/MRA), which are left out of the mapping.</p>
+          <p>One row per defined subnet with its phone count. Click a row to expand its CM group breakdown (and its CER subnet, when CER is enabled). The header counts phones mapped to a subnet, phones with an IP outside every subnet, phones with no IP (not registered and no last-known IP), and phones sharing an IP with others (e.g. Expressway/MRA) that no defined subnet covers. Shared-IP phones do count under a subnet you defined for them (such as an Expressway <C>/32</C>), but are never used for CER import or replace suggestions.</p>
         </div>
         <div className="space-y-2">
           <H4>CER Cross-Reference (optional)</H4>
