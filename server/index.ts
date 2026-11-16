@@ -22,6 +22,7 @@ import agRouter from "./routes/ag.routes.js";
 import gatewaysRouter from "./routes/gateways.routes.js";
 import servicesRouter from "./routes/services.routes.js";
 import reportRouter from "./routes/report.routes.js";
+import cerRouter from "./routes/cer.routes.js";
 import { join, dirname } from "path";
 import { fileURLToPath, URL } from "url";
 import { existsSync } from "fs";
@@ -53,6 +54,7 @@ app.use("/api/trunks", trunksRouter);
 app.use("/api/ag", agRouter);
 app.use("/api/services", servicesRouter);
 app.use("/api/report", reportRouter);
+app.use("/api/cer", cerRouter);
 if (config.features.enableGateways) {
   app.use("/api/gateways", gatewaysRouter);
 }
@@ -62,6 +64,7 @@ app.get("/api/features", (_req, res) => {
   res.json({
     enableGateways: config.features.enableGateways,
     demoMode: config.features.demoMode,
+    enableCer: config.features.enableCer,
   });
 });
 

@@ -859,3 +859,70 @@ export function getPhonesWithIps() {
     )
     .all();
 }
+
+// --- CER ---
+
+export interface CerSubnetRow {
+  cidr: string;
+  subnet_id: string;
+  mask: string;
+  erl_name: string;
+  location: string;
+}
+
+export function getCerSubnets(): CerSubnetRow[] {
+  return getDb().prepare("SELECT cidr, subnet_id, mask, erl_name, location FROM cer_subnets").all() as CerSubnetRow[];
+}
+
+/** Replace all CER subnets in one transaction and record a successful sync. */
+export function replaceCerSubnets(
+  rows: { cidr: string; subnetId: string; mask: string; erlName: string; location: string }[],
+  skippedNontrackable: number,
+) {
+  const db = getDb();
+  const insert = db.prepare(
+    "INSERT OR REPLACE INTO cer_subnets (cidr, subnet_id, mask, erl_name, location, synced_at) VALUES (?, ?, ?, ?, ?, datetime('now'))",
+  );
+  db.transaction(() => {
+    db.prepare("DELETE FROM cer_subnets").run();
+    for (const r of rows) insert.run(r.cidr, r.subnetId, r.mask, r.erlName, r.location);
+    db.prepare(
+      `INSERT INTO cer_sync_status (id, last_success, subnet_count, skipped_nontrackable, last_error, last_attempt)
+       VALUES (1, datetime('now'), ?, ?, '', datetime('now'))
+       ON CONFLICT(id) DO UPDATE SET last_success = excluded.last_success, subnet_count = excluded.subnet_count,
+         skipped_nontrackable = excluded.skipped_nontrackable, last_error = '', last_attempt = excluded.last_attempt`,
+    ).run(rows.length, skippedNontrackable);
+  })();
+}
+
+export function recordCerSyncError(message: string) {
+  getDb()
+    .prepare(
+      `INSERT INTO cer_sync_status (id, last_error, last_attempt) VALUES (1, ?, datetime('now'))
+       ON CONFLICT(id) DO UPDATE SET last_error = excluded.last_error, last_attempt = excluded.last_attempt`,
+    )
+    .run(message);
+}
+
+export function getCerSyncStatus(): {
+  last_success: string | null;
+  subnet_count: number;
+  skipped_nontrackable: number;
+  last_error: string;
+  last_attempt: string | null;
+} | null {
+  return (getDb().prepare("SELECT * FROM cer_sync_status WHERE id = 1").get() as any) ?? null;
+}
+
+/** Phones with their effective IP (current RISPort IP, else last known) and CM group. */
+export function getPhonesForSubnetOverview(): { ip: string | null; cm_group_name: string | null }[] {
+  return getDb()
+    .prepare(
+      `SELECT COALESCE(NULLIF(lr.ip_address, ''), NULLIF(p.last_known_ip, '')) AS ip, cmg.name AS cm_group_name
+       FROM phones p
+       LEFT JOIN device_pools dp ON p.device_pool_id = dp.id
+       LEFT JOIN cm_groups cmg ON dp.cm_group_id = cmg.id
+       LEFT JOIN latest_registrations lr ON lr.phone_id = p.id`,
+    )
+    .all() as any;
+}

@@ -144,3 +144,21 @@ CREATE TABLE IF NOT EXISTS service_statuses (
 CREATE INDEX IF NOT EXISTS idx_reg_latest ON registration_snapshots(phone_id, polled_at DESC);
 CREATE INDEX IF NOT EXISTS idx_phones_pool ON phones(device_pool_id);
 CREATE INDEX IF NOT EXISTS idx_cmg_members ON cm_group_members(cm_group_id, priority);
+
+CREATE TABLE IF NOT EXISTS cer_subnets (
+  cidr TEXT PRIMARY KEY,
+  subnet_id TEXT NOT NULL,
+  mask TEXT NOT NULL,
+  erl_name TEXT DEFAULT '',
+  location TEXT DEFAULT '',
+  synced_at TEXT DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS cer_sync_status (
+  id INTEGER PRIMARY KEY CHECK (id = 1),
+  last_success TEXT,
+  subnet_count INTEGER DEFAULT 0,
+  skipped_nontrackable INTEGER DEFAULT 0,
+  last_error TEXT DEFAULT '',
+  last_attempt TEXT
+);

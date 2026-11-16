@@ -5,7 +5,12 @@ import {
   updateSubnet,
   deleteSubnet,
   getPhonesWithIps,
+  getCerSubnets,
+  getPhonesForSubnetOverview,
 } from "../db/queries.js";
+import { buildOverview, type CerSubnet } from "../utils/cer.js";
+import { config } from "../config.js";
+import { cerStatusJson } from "./cer.routes.js";
 import { getDb } from "../db/database.js";
 import { ipToLong, parseSubnets, matchSubnetFast, matchSubnet, type SubnetRow } from "../utils/subnet.js";
 import { getCached, setCache, invalidateCache } from "../services/cache.service.js";
@@ -273,6 +278,121 @@ router.get("/shared-ips", (_req, res) => {
     )
     .all();
   res.json(rows);
+});
+
+// --- Combined overview (subnets + phones + optional CER cross-reference) ---
+
+function cerSubnetsIfSynced(): CerSubnet[] | null {
+  if (!config.features.enableCer) return null;
+  const status = cerStatusJson();
+  if (!status.lastSuccess) return null;
+  return getCerSubnets().map((r) => ({
+    cidr: r.cidr,
+    subnetId: r.subnet_id,
+    mask: r.mask,
+    erlName: r.erl_name,
+    location: r.location,
+  }));
+}
+
+function computeOverview() {
+  const cerSubnets = cerSubnetsIfSynced();
+  const overview = buildOverview({
+    appSubnets: getAllSubnets() as SubnetRow[],
+    cerSubnets,
+    phones: getPhonesForSubnetOverview().map((p) => ({ ip: p.ip, cmGroup: p.cm_group_name || "Unknown" })),
+  });
+  return { cer: config.features.enableCer ? cerStatusJson() : null, ...overview };
+}
+
+router.get("/overview", (_req, res) => {
+  const cached = getCached("subnet:overview");
+  if (cached) {
+    res.json(cached);
+    return;
+  }
+  const result = computeOverview();
+  setCache("subnet:overview", result);
+  res.json(result);
+});
+
+function importCidrs(cidrs: string[]) {
+  const byCidr = new Map(getCerSubnets().map((r) => [r.cidr, r]));
+  const existing = new Set((getAllSubnets() as SubnetRow[]).map((s) => s.cidr));
+  let created = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+  for (const cidr of cidrs) {
+    const cer = byCidr.get(cidr);
+    if (!cer) {
+      errors.push(`${cidr}: not in CER`);
+      continue;
+    }
+    if (existing.has(cidr)) {
+      skipped++;
+      continue;
+    }
+    try {
+      createSubnet(cidr, cer.erl_name || cidr, cer.location || "Imported from CER");
+      existing.add(cidr);
+      created++;
+    } catch (e: any) {
+      if (e.message?.includes("UNIQUE")) skipped++;
+      else errors.push(`${cidr}: ${e.message}`);
+    }
+  }
+  return { created, skipped, errors };
+}
+
+// POST import CER subnets into the app (reviewed action from the UI)
+router.post("/import-cer", (req, res) => {
+  if (!config.features.enableCer) {
+    res.status(400).json({ error: "CER not configured" });
+    return;
+  }
+  const cidrs = Array.isArray(req.body?.cidrs) ? (req.body.cidrs as unknown[]).map(String) : [];
+  const result = importCidrs(cidrs);
+  invalidateCache("subnet:");
+  res.json(result);
+});
+
+// POST replace mismatched app subnets with the CER subnets that overlap them and hold phones
+router.post("/replace-cer", (req, res) => {
+  if (!config.features.enableCer) {
+    res.status(400).json({ error: "CER not configured" });
+    return;
+  }
+  const ids = Array.isArray(req.body?.subnetIds) ? (req.body.subnetIds as unknown[]).map(Number) : [];
+  const overview = computeOverview();
+  let replaced = 0;
+  let created = 0;
+  let skipped = 0;
+  const refused: { id: number; reason: string }[] = [];
+  const errors: string[] = [];
+  for (const id of ids) {
+    const row = overview.subnets.find((s) => s.id === id);
+    if (!row) {
+      refused.push({ id, reason: "subnet not found" });
+      continue;
+    }
+    if (row.cerStatus !== "mismatch") {
+      refused.push({ id, reason: "not a CER mismatch" });
+      continue;
+    }
+    const targets = row.replaceWith || [];
+    if (targets.length === 0) {
+      refused.push({ id, reason: "no overlapping CER subnet has phones" });
+      continue;
+    }
+    deleteSubnet(id);
+    const r = importCidrs(targets);
+    replaced++;
+    created += r.created;
+    skipped += r.skipped;
+    errors.push(...r.errors);
+  }
+  invalidateCache("subnet:");
+  res.json({ replaced, created, skipped, refused, errors });
 });
 
 export default router;
