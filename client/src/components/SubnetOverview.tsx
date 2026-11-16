@@ -1,4 +1,5 @@
 import { useState, useEffect, Fragment } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api/client";
 import type { Subnet, SubnetOverview as Overview, CerMatchStatus } from "../api/client";
 import { useSort, ColHeader } from "./TableHeader";
@@ -257,7 +258,13 @@ export default function SubnetOverview({
                             <button
                               onClick={() => replace([s])}
                               disabled={busy || !(s.replaceWith?.length)}
-                              title={s.replaceWith?.length ? `Replace with ${s.replaceWith.join(", ")}` : "No overlapping CER subnet has phones or is already defined"}
+                              title={
+                                s.replaceWith?.length
+                                  ? `Replace with ${s.replaceWith.join(", ")}`
+                                  : s.cerStatus === "inside"
+                                    ? "The wider CER subnet isn't in your list; Use CER only rolls up into subnets you have"
+                                    : "No overlapping CER subnet has phones of its own or is already defined"
+                              }
                               className={`${btn} border-noc-amber/40 text-noc-amber`}
                             >
                               Use CER
@@ -303,8 +310,11 @@ export default function SubnetOverview({
                                   <div key={c.cidr} className="text-noc-text">
                                     <span className="text-noc-text-dim">CER</span> {c.cidr} · ERL <span className="text-noc-text-bright">{c.erlName}</span> · {c.location}
                                     {c.broad && <span className="text-noc-amber"> · broad</span>}
-                                    {(s.cerStatus === "mismatch" || s.cerStatus === "inside") && !s.replaceWith?.includes(c.cidr) && (
-                                      <span className="text-noc-text-dim"> · no phones</span>
+                                    {s.cerStatus === "mismatch" && !s.replaceWith?.includes(c.cidr) && (
+                                      <span className="text-noc-text-dim"> · no phones of its own</span>
+                                    )}
+                                    {s.cerStatus === "inside" && !s.replaceWith?.includes(c.cidr) && (
+                                      <span className="text-noc-text-dim"> · not in your list (Use CER only rolls up into subnets you have)</span>
                                     )}
                                   </div>
                                 ))
@@ -382,7 +392,8 @@ export default function SubnetOverview({
           )}
         </div>
       )}
-      {pending && (
+      {pending &&
+        createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
           onClick={() => !busy && setPending(null)}
@@ -414,7 +425,7 @@ export default function SubnetOverview({
                 Cancel
               </button>
               <button
-                autoFocus
+                ref={(el) => el?.focus({ preventScroll: true })}
                 onClick={() => {
                   const action = pending.action;
                   setPending(null);
@@ -428,8 +439,9 @@ export default function SubnetOverview({
               </button>
             </div>
           </div>
-        </div>
-      )}
+        </div>,
+          document.body,
+        )}
     </>
   );
 }
