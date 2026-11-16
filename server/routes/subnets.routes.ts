@@ -376,13 +376,13 @@ router.post("/replace-cer", (req, res) => {
       refused.push({ id, reason: "subnet not found" });
       continue;
     }
-    if (row.cerStatus !== "mismatch") {
+    if (row.cerStatus !== "mismatch" && row.cerStatus !== "inside") {
       refused.push({ id, reason: "not a CER mismatch" });
       continue;
     }
     const targets = row.replaceWith || [];
     if (targets.length === 0) {
-      refused.push({ id, reason: "no overlapping CER subnet has phones" });
+      refused.push({ id, reason: "no overlapping CER subnet has phones or is already defined" });
       continue;
     }
     try {

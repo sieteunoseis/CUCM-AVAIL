@@ -19,15 +19,21 @@ function relTime(sqlTime: string | null): string {
   return `${Math.round(mins / 1440)}d ago`;
 }
 
-const STATUS_ORDER: Record<CerMatchStatus, number> = { missing: 0, mismatch: 1, match: 2 };
+const STATUS_ORDER: Record<CerMatchStatus, number> = { missing: 0, mismatch: 1, inside: 2, match: 3 };
 
 function CerBadge({ row }: { row: Row }) {
   if (!row.cerStatus) return null;
   if (row.cerStatus === "match") {
     return <span className="text-noc-green" title={row.cer?.[0]?.erlName}>✓ {row.cer?.[0]?.erlName || "in CER"}</span>;
   }
+  const list = (row.cer ?? []).map((c) => c.cidr).join(", ");
+  if (row.cerStatus === "inside") {
+    return <span className="text-noc-green" title={row.cer?.map((c) => `${c.cidr} · ${c.erlName}`).join("\n")}>✓ inside CER {list}</span>;
+  }
   if (row.cerStatus === "mismatch") {
-    return <span className="text-noc-amber">⚠ CER has {row.cer?.map((c) => c.cidr.split("/")[1]).map((b) => `/${b}`).join(", ")}</span>;
+    const ourBits = parseInt(row.cidr.split("/")[1], 10);
+    const allNarrower = (row.cer ?? []).every((c) => parseInt(c.cidr.split("/")[1], 10) > ourBits);
+    return <span className="text-noc-amber" title={list}>⚠ {allNarrower ? "split in CER" : "CER"}: {list}</span>;
   }
   return <span className="text-noc-red">✗ missing</span>;
 }
@@ -52,7 +58,22 @@ export default function SubnetOverview({
   const [filter, setFilter] = useState<Filter>("all");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
+  const [pending, setPending] = useState<{
+    title: string;
+    rows: { left: string; right: string }[];
+    warning?: string;
+    confirmLabel: string;
+    action: () => Promise<string>;
+  } | null>(null);
   const { sort, toggle, sorted } = useSort<SortKey>();
+  useEffect(() => {
+    if (!pending) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPending(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pending]);
 
   useEffect(() => {
     api.getSubnetOverview().then(setData).catch((e) => setError(String(e)));
@@ -99,34 +120,43 @@ export default function SubnetOverview({
     }
   };
 
+  const definedCidrs = new Set(data.subnets.map((x) => x.cidr));
+
   const replace = (targets: Row[]) => {
     const ok = targets.filter((r) => (r.replaceWith?.length ?? 0) > 0);
     if (ok.length === 0) {
-      setNotice("Nothing to replace: no overlapping CER subnet has phones.");
+      setNotice("Nothing to replace: no overlapping CER subnet has phones or is already defined.");
       return;
     }
-    const lines = ok
-      .slice(0, 15)
-      .map((r) => `- remove ${r.cidr} (${r.name})  →  add ${r.replaceWith!.join(", ")}`)
-      .join("\n");
-    const more = ok.length > 15 ? `\n…and ${ok.length - 15} more` : "";
     const broad = ok.some((r) => r.cer?.some((c) => c.broad && r.replaceWith!.includes(c.cidr)));
-    if (!window.confirm(`Replace ${ok.length} subnet(s) with CER's:\n\n${lines}${more}${broad ? "\n\nWarning: includes a broad CER subnet (shorter than /22)." : ""}`)) return;
-    run(async () => {
-      const r = await api.replaceWithCer(ok.map((x) => x.id));
-      return `Replaced ${r.replaced} · added ${r.created} · already present ${r.skipped}${r.refused.length ? ` · refused ${r.refused.length}` : ""}${r.errors.length ? ` · errors ${r.errors.length}` : ""}`;
+    setPending({
+      title: `Replace ${ok.length} subnet${ok.length === 1 ? "" : "s"} with CER's`,
+      rows: ok.map((r) => {
+        const have = r.replaceWith!.filter((c) => definedCidrs.has(c));
+        const add = r.replaceWith!.filter((c) => !definedCidrs.has(c));
+        const parts = [add.length ? `add ${add.join(", ")}` : "", have.length ? `phones move to existing ${have.join(", ")}` : ""].filter(Boolean);
+        return { left: `remove ${r.cidr} · ${r.name} · ${r.phones.toLocaleString()} phones`, right: parts.join("; ") };
+      }),
+      warning: broad ? "Includes a broad CER subnet (wider than /22)." : undefined,
+      confirmLabel: "Replace",
+      action: async () => {
+        const r = await api.replaceWithCer(ok.map((x) => x.id));
+        return `Replaced ${r.replaced} · added ${r.created} · already present ${r.skipped}${r.refused.length ? ` · refused ${r.refused.length}` : ""}${r.errors.length ? ` · errors ${r.errors.length}` : ""}`;
+      },
     });
   };
 
   const importCidrs = (items: Overview["unmapped"]["inCer"]) => {
     if (items.length === 0) return;
-    const lines = items.slice(0, 15).map((u) => `- ${u.cidr}  ${u.erlName}  (${u.phones} phones)`).join("\n");
-    const more = items.length > 15 ? `\n…and ${items.length - 15} more` : "";
-    const broad = items.some((u) => u.broad);
-    if (!window.confirm(`Import ${items.length} subnet(s) from CER:\n\n${lines}${more}${broad ? "\n\nWarning: this is a broad CER subnet (shorter than /22)." : ""}`)) return;
-    run(async () => {
-      const r = await api.importCerSubnets(items.map((u) => u.cidr));
-      return `Imported ${r.created} · already present ${r.skipped}${r.errors.length ? ` · errors ${r.errors.length}` : ""}`;
+    setPending({
+      title: `Import ${items.length} subnet${items.length === 1 ? "" : "s"} from CER`,
+      rows: items.map((u) => ({ left: `add ${u.cidr} · ${u.erlName}`, right: `${u.location} · ${u.phones.toLocaleString()} phones` })),
+      warning: items.some((u) => u.broad) ? "Includes a broad CER subnet (wider than /22)." : undefined,
+      confirmLabel: "Import",
+      action: async () => {
+        const r = await api.importCerSubnets(items.map((u) => u.cidr));
+        return `Imported ${r.created} · already present ${r.skipped}${r.errors.length ? ` · errors ${r.errors.length}` : ""}`;
+      },
     });
   };
 
@@ -179,6 +209,7 @@ export default function SubnetOverview({
         )}
         {notice && <div className="px-4 py-2 border-b border-noc-border font-mono text-xs text-noc-cyan" data-testid="subnet-notice">{notice}</div>}
 
+
         <div className="overflow-x-auto">
           <table className="w-full text-sm" style={{ tableLayout: "fixed" }}>
             <thead>
@@ -222,11 +253,11 @@ export default function SubnetOverview({
                       )}
                       <td className="px-4 py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                         <div className="flex items-center justify-end gap-2">
-                          {s.cerStatus === "mismatch" && (
+                          {(s.cerStatus === "mismatch" || s.cerStatus === "inside") && (
                             <button
                               onClick={() => replace([s])}
                               disabled={busy || !(s.replaceWith?.length)}
-                              title={s.replaceWith?.length ? `Replace with ${s.replaceWith.join(", ")}` : "No overlapping CER subnet has phones"}
+                              title={s.replaceWith?.length ? `Replace with ${s.replaceWith.join(", ")}` : "No overlapping CER subnet has phones or is already defined"}
                               className={`${btn} border-noc-amber/40 text-noc-amber`}
                             >
                               Use CER
@@ -272,7 +303,7 @@ export default function SubnetOverview({
                                   <div key={c.cidr} className="text-noc-text">
                                     <span className="text-noc-text-dim">CER</span> {c.cidr} · ERL <span className="text-noc-text-bright">{c.erlName}</span> · {c.location}
                                     {c.broad && <span className="text-noc-amber"> · broad</span>}
-                                    {s.cerStatus === "mismatch" && !s.replaceWith?.includes(c.cidr) && (
+                                    {(s.cerStatus === "mismatch" || s.cerStatus === "inside") && !s.replaceWith?.includes(c.cidr) && (
                                       <span className="text-noc-text-dim"> · no phones</span>
                                     )}
                                   </div>
@@ -349,6 +380,54 @@ export default function SubnetOverview({
               </table>
             </>
           )}
+        </div>
+      )}
+      {pending && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 px-4"
+          onClick={() => !busy && setPending(null)}
+          data-testid="confirm-backdrop"
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label={pending.title}
+            onClick={(e) => e.stopPropagation()}
+            className="w-full max-w-3xl border border-noc-amber/50 bg-noc-surface font-mono text-xs shadow-2xl"
+            data-testid="confirm-card"
+          >
+            <div className="px-4 py-2.5 border-b border-noc-amber/30 text-noc-amber uppercase tracking-widest text-[11px] font-semibold">
+              {pending.title}
+            </div>
+            <div className="max-h-[60vh] overflow-y-auto divide-y divide-noc-border/40">
+              {pending.rows.map((r, i) => (
+                <div key={i} className="px-4 py-2 flex flex-wrap gap-x-3">
+                  <span className="text-noc-text-bright">{r.left}</span>
+                  <span className="text-noc-border">→</span>
+                  <span className="text-noc-cyan">{r.right}</span>
+                </div>
+              ))}
+            </div>
+            {pending.warning && <div className="px-4 py-2 border-t border-noc-amber/30 text-noc-amber">⚠ {pending.warning}</div>}
+            <div className="px-4 py-2.5 border-t border-noc-amber/30 flex items-center justify-end gap-2">
+              <button onClick={() => setPending(null)} disabled={busy} className={`${btn} border-noc-border text-noc-text-dim hover:text-noc-text`}>
+                Cancel
+              </button>
+              <button
+                autoFocus
+                onClick={() => {
+                  const action = pending.action;
+                  setPending(null);
+                  run(action);
+                }}
+                disabled={busy}
+                data-testid="confirm-card-ok"
+                className={`${btn} border-noc-amber/60 text-noc-amber bg-noc-amber/10`}
+              >
+                {pending.confirmLabel}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </>

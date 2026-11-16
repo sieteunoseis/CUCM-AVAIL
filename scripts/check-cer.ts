@@ -149,6 +149,40 @@ assert.deepEqual(
   assert.deepEqual(r.unmapped.notInCer, []);
 }
 
+// --- v1.8.3: "inside" status + Use CER when the wider CER subnet is already defined ---
+{
+  const r = buildOverview({
+    appSubnets: [
+      { id: 1, cidr: "10.156.20.0/24", name: "server vlan", description: "" },
+      { id: 2, cidr: "10.156.20.48/32", name: "psxMRACore01", description: "" },
+      { id: 3, cidr: "10.40.0.0/24", name: "narrow, CER wider, not defined", description: "" },
+      { id: 4, cidr: "10.41.0.0/23", name: "mixed", description: "" },
+    ],
+    cerSubnets: [cer("10.156.20.0/24"), cer("10.40.0.0/16"), cer("10.41.0.0/22"), cer("10.41.0.0/24")],
+    phones: [
+      { ip: "10.156.20.48", cmGroup: "G" },
+      { ip: "10.156.20.48", cmGroup: "G" },
+    ],
+  });
+  const by = (id: number) => r.subnets.find((s) => s.id === id)!;
+  assert.equal(by(1).cerStatus, "match");
+  assert.equal(by(2).cerStatus, "inside");
+  assert.deepEqual(by(2).replaceWith, ["10.156.20.0/24"]); // already defined -> Use CER just removes the /32
+  assert.equal(by(3).cerStatus, "inside");
+  assert.deepEqual(by(3).replaceWith, []); // CER /16 has no phones and isn't defined
+  assert.equal(by(4).cerStatus, "mismatch"); // CER both wider (/22) and narrower (/24)
+}
+{
+  // inside + wider CER subnet has phones but is NOT defined here -> no Use CER (don't swap a /24 for a /16)
+  const r = buildOverview({
+    appSubnets: [{ id: 1, cidr: "10.30.1.0/24", name: "br", description: "" }],
+    cerSubnets: [cer("10.30.0.0/16")],
+    phones: [{ ip: "10.30.1.7", cmGroup: "G" }],
+  });
+  assert.equal(r.subnets[0].cerStatus, "inside");
+  assert.deepEqual(r.subnets[0].replaceWith, []);
+}
+
 // --- Fix pass: unexpected bodies and truncated paging must not "succeed" ---
 assert.equal(normalizeCerPage({ status: "Access Denied" }).valid, false);
 assert.equal(normalizeCerPage({ subnetDetails: null, paging: { count: "0" } }).valid, false);

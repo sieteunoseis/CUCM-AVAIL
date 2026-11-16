@@ -459,7 +459,7 @@ export interface CerStatus {
   lastAttempt: string | null;
 }
 
-export type CerMatchStatus = "match" | "mismatch" | "missing";
+export type CerMatchStatus = "match" | "inside" | "mismatch" | "missing";
 
 export interface SubnetOverview {
   cer: CerStatus | null;

@@ -1,7 +1,11 @@
 import { ipToLong, parseCidr } from "./subnet.js";
 
 export type CerSubnet = { cidr: string; subnetId: string; mask: string; erlName: string; location: string };
-export type CerStatus = "match" | "mismatch" | "missing";
+/**
+ * match: CER has the identical subnet. inside: ours sits inside wider CER subnet(s) only.
+ * mismatch: CER splits ours into narrower subnets (or mixes wider and narrower). missing: no overlap.
+ */
+export type CerStatus = "match" | "inside" | "mismatch" | "missing";
 
 /** A CER subnet with a prefix shorter than this is "broad". */
 export const BROAD_PREFIX = 22;
@@ -226,23 +230,29 @@ export function buildOverview(input: {
     return ipToLong(na) - ipToLong(nb) || parseInt(ba, 10) - parseInt(bb, 10);
   };
 
-  const subnets: Overview["subnets"] = app.map(({ row, network, mask }) => {
+  const appCidrs = new Set(app.map((a) => a.row.cidr));
+  const subnets: Overview["subnets"] = app.map(({ row, network, mask, bits }) => {
     const stats = perSubnet.get(row.id) || { phones: 0, cmGroups: {} };
     const base = { id: row.id, cidr: row.cidr, name: row.name, description: row.description, ...stats };
     if (!cerSubnets) return base;
-    const over = cer
-      .filter((c) => overlaps({ network, mask }, c))
-      .map((c) => c.row.cidr)
-      .sort(byCidr);
-    const exact = over.includes(row.cidr);
-    const cerStatus: CerStatus = exact ? "match" : over.length ? "mismatch" : "missing";
-    const shown = exact ? [row.cidr] : over;
+    const over = cer.filter((c) => overlaps({ network, mask }, c));
+    const exact = over.some((c) => c.row.cidr === row.cidr);
+    const narrower = over.filter((c) => c.bits > bits);
+    const cerStatus: CerStatus = exact ? "match" : over.length === 0 ? "missing" : narrower.length === 0 ? "inside" : "mismatch";
+    const shown = (exact ? [row.cidr] : over.map((c) => c.row.cidr)).sort(byCidr);
     const result: Overview["subnets"][number] = {
       ...base,
       cerStatus,
       cer: shown.map((c) => ({ cidr: c, erlName: cerByCidr.get(c)!.erlName, location: cerByCidr.get(c)!.location, broad: broad(c) })),
     };
-    if (cerStatus === "mismatch") result.replaceWith = over.filter((c) => cerHasPhone.has(c));
+    // Use CER targets: CER subnets with phones of their own, or ones already defined here
+    // (then replacing just removes our narrower subnet and its phones roll up).
+    if (cerStatus === "mismatch") {
+      result.replaceWith = shown.filter((c) => cerHasPhone.has(c) || appCidrs.has(c));
+    } else if (cerStatus === "inside") {
+      // Only roll up into a wider CER subnet you already have; never import a wider one over ours.
+      result.replaceWith = shown.filter((c) => appCidrs.has(c));
+    }
     return result;
   });
   // Subnets that failed to parse still show, without stats.
